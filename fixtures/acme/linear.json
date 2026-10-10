@@ -1,0 +1,25 @@
+[
+ {
+  "identifier": "PAY-88",
+  "title": "Reuse the idempotency key across checkout retries",
+  "state": "In Progress",
+  "assignee": "Payments squad",
+  "description": "Root cause of the double charges: the retry path generates a fresh key. Fix is to derive the key from the order id.",
+  "url": "https://linear.app/acme/issue/PAY-88",
+  "access": [
+   "engineering"
+  ]
+ },
+ {
+  "identifier": "WEB-210",
+  "title": "Order history dark mode",
+  "state": "Backlog",
+  "assignee": "Web squad",
+  "description": "Follow the new design tokens.",
+  "url": "https://linear.app/acme/issue/WEB-210",
+  "access": [
+   "engineering",
+   "contractors"
+  ]
+ }
+]

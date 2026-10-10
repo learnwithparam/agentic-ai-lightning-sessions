@@ -1,0 +1,43 @@
+[
+ {
+  "number": 412,
+  "title": "Checkout retry charges the card twice after a gateway timeout",
+  "state": "open",
+  "body": "When the payment gateway times out, the client retries and the second attempt creates a new charge. Seen 14 times this week.",
+  "url": "https://github.com/acme/shop/issues/412",
+  "labels": [
+   "bug",
+   "payments"
+  ],
+  "access": [
+   "engineering"
+  ]
+ },
+ {
+  "number": 398,
+  "title": "Add idempotency key header to payment client",
+  "state": "closed",
+  "body": "Merged in #401. The client sends Idempotency-Key, but the retry path builds a new key each time.",
+  "url": "https://github.com/acme/shop/issues/398",
+  "labels": [
+   "payments"
+  ],
+  "access": [
+   "engineering"
+  ]
+ },
+ {
+  "number": 377,
+  "title": "Dark mode for the order history page",
+  "state": "open",
+  "body": "Design is ready in Figma.",
+  "url": "https://github.com/acme/shop/issues/377",
+  "labels": [
+   "frontend"
+  ],
+  "access": [
+   "engineering",
+   "contractors"
+  ]
+ }
+]

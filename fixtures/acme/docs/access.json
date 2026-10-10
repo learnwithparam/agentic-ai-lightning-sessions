@@ -1,0 +1,9 @@
+{
+ "payments-retries": [
+  "engineering"
+ ],
+ "release-process": [
+  "engineering",
+  "contractors"
+ ]
+}

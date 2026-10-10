@@ -1,0 +1,36 @@
+[project]
+name = "ai-workforce"
+version = "0.1.0"
+description = "Agentic AI workforce by learnwithparam.com: the system the buildcamp, workshops and Live Labs build"
+requires-python = ">=3.13"
+dependencies = [
+    "aiohttp==3.14.4",
+    "openai-agents==0.23.1",
+    "slack-bolt==1.30.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.1.1",
+    "ruff==0.16.7",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "--import-mode=importlib -q --strict-markers"
+markers = ["lab(slug): the acceptance test for one Live Lab, named in steps.toml"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S"]
+ignore = ["S101"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["workforce"]
