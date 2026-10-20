@@ -1,0 +1,59 @@
+# Every free Maven Lightning that sells the Agentic AI Buildcamp and its workshops, one folder each.
+# A session is `built` when its folder exists, its `make check` passes and its steps.toml marks the
+# Lightning's slug as built; scripts/check_sessions.py enforces it. Slugs and titles are Maven's.
+
+[[session]]
+date = "2026-10-22"
+slug = "build-an-ai-mission-control-app"
+title = "Build a Mission Control for AI Agents"
+folder = "mission-control"
+built = true
+
+[[session]]
+date = "2026-10-29"
+slug = "build-a-team-of-ai-agents"
+title = "Build a Multi-Agent System with MCP"
+folder = "multi-agent-mcp"
+built = false
+
+[[session]]
+date = "2026-11-05"
+slug = "add-auth-and-guardrails-to-ai-agents"
+title = "Secure AI Agents with Guardrails"
+folder = "guardrails"
+built = false
+
+[[session]]
+date = "2026-11-12"
+slug = "cut-ai-agent-costs-with-prompt-caching"
+title = "Cut AI Agent Costs with Token Economics"
+folder = "token-economics"
+built = false
+
+[[session]]
+date = "2026-11-19"
+slug = "build-an-ai-second-brain-with-claude-code"
+title = "Build a Second Brain with Claude Code"
+folder = "second-brain"
+built = false
+
+[[session]]
+date = "2026-12-03"
+slug = "build-evals-for-an-ai-agent"
+title = "Build AI Agent Evals from Production Traces"
+folder = "evals-from-traces"
+built = false
+
+[[session]]
+date = "2026-12-10"
+slug = "build-an-ai-agent-dashboard-with-langfuse"
+title = "Trace AI Agents in Production"
+folder = "trace-in-production"
+built = false
+
+[[session]]
+date = "2026-12-17"
+slug = "build-an-ai-agent-governance-framework"
+title = "Build an AI Agent Governance Framework"
+folder = "governance"
+built = false

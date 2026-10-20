@@ -4,3 +4,5 @@ __pycache__/
 *.sqlite
 .ruff_cache/
 .pytest_cache/
+.mission/
+.playwright-cli/

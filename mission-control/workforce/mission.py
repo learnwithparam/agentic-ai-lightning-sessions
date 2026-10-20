@@ -1,0 +1,212 @@
+"""The manager and the support resolver, working a card on the board.
+
+The manager owns the card and hands it to the employee hired for it: the analyst for a question, the
+resolver for a customer's money. A refund cannot be undone, so the resolver only requests one; the card
+waits in Needs you until a human decides. No agent can approve, the maker least of all, and that rule
+lives in `decide`, not in a prompt. A card is Done when the ledger agrees, never when an agent says so.
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import os
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field, replace
+from pathlib import Path
+
+from agents import Agent, AgentsException, Model, RunContextWrapper, Runner, Usage, function_tool
+
+from workforce.analyst import INSTRUCTIONS as ANALYST_INSTRUCTIONS
+from workforce.analyst import Desk, search_docs, search_github, search_linear
+from workforce.board import Board, Card, Run, price, serve
+from workforce.ledger import Ledger
+from workforce.sources import Readers
+
+MANAGER, RESOLVER, ANALYST = "Manager", "Support resolver", "Engineering analyst"
+EMPLOYEES = frozenset({MANAGER, RESOLVER, ANALYST})
+STATE = Path(__file__).resolve().parent.parent / ".mission"
+
+
+class NotAllowed(Exception):
+    pass
+
+
+@dataclass
+class Shift(Desk):
+    """What one run on a card may touch: the analyst's readers, the ledger and the card itself."""
+
+    ledger: Ledger | None = None
+    card: Card | None = None
+    attempts: list[str] = field(default_factory=list)
+
+
+def decide(card: Card, ledger: Ledger, by: str, approve: bool) -> str:
+    """The maker-checker gate. Only a human other than the maker settles a pending action."""
+    if card.pending is None:
+        raise NotAllowed("nothing is waiting for a decision")
+    if by in EMPLOYEES or by == card.pending["maker"]:
+        raise NotAllowed(f"{by} may not approve an action an AI employee made")
+    action, card.pending = card.pending, None
+    if not approve:
+        return f"{by} declined the refund of {action['charge']}"
+    row = ledger.refund(action["charge"], approved_by=by)
+    return f"{by} approved; refunded {row['amount'] / 100:.2f} on {action['charge']}"
+
+
+@function_tool
+def find_charges(ctx: RunContextWrapper[Shift], customer: str) -> str:
+    """List a customer's charges in the payments ledger, with the order each belongs to."""
+    rows = [c for c in ctx.context.ledger.charges if c["customer"] == customer]
+    if not rows:
+        return f"No charges for {customer}."
+    return "\n".join(
+        f"{c['id']} order {c['order']} {c['amount'] / 100:.2f} at {c['at']}"
+        f"{' (refunded)' if ctx.context.ledger.refunded(c['id']) else ''}"
+        for c in rows
+    )
+
+
+@function_tool
+def request_refund(ctx: RunContextWrapper[Shift], charge_id: str, reason: str) -> str:
+    """Ask a human to approve refunding one charge. The refund happens only after they approve."""
+    shift = ctx.context
+    try:
+        charge = shift.ledger.charge(charge_id)
+    except KeyError:
+        return f"There is no charge {charge_id}."
+    if charge["customer"] != shift.card.customer:
+        return f"{charge_id} belongs to another customer; this card is about {shift.card.customer}."
+    if shift.ledger.refunded(charge_id):
+        return f"{charge_id} is already refunded."
+    shift.card.pending = {"action": "refund", "charge": charge_id, "reason": reason, "maker": RESOLVER}
+    return "Sent to a human for approval. Stop here and say the refund is waiting for approval."
+
+
+@function_tool
+def approve_pending(ctx: RunContextWrapper[Shift]) -> str:
+    """Approve the action waiting on this card."""
+    shift = ctx.context
+    try:
+        return decide(shift.card, shift.ledger, by=MANAGER, approve=True)
+    except NotAllowed as e:
+        shift.attempts.append(str(e))
+        return f"Refused: {e}. A human must approve it in Needs you."
+
+
+def resolver(model: Model | str | None) -> Agent[Shift]:
+    return Agent[Shift](
+        name=RESOLVER,
+        handoff_description="Resolves a customer's billing problem in the payments ledger.",
+        instructions=(
+            "You resolve customers' billing problems. Look up the customer's charges first. A duplicate "
+            "is a second charge on the same order. Request a refund for each duplicate, never for the "
+            "first charge on an order. Say plainly what you found and what is waiting for approval."
+        ),
+        tools=[find_charges, request_refund],
+        model=model,
+    )
+
+
+def manager(model: Model | str | None = None) -> Agent[Shift]:
+    model = model or os.environ.get("WORKFORCE_MODEL", "gpt-5-mini")
+    analyst = Agent[Shift](
+        name=ANALYST,
+        handoff_description="Answers engineering questions from GitHub, Linear and the docs.",
+        instructions=ANALYST_INSTRUCTIONS,
+        tools=[search_github, search_linear, search_docs],
+        model=model,
+    )
+    return Agent[Shift](
+        name=MANAGER,
+        instructions=(
+            "You manage a board of AI employees. Read the card and hand it to the one employee hired for "
+            "it: the support resolver for a customer's charges or refunds, the engineering analyst for "
+            "a question about the code or a bug. Do not do their work yourself."
+        ),
+        handoffs=[resolver(model), analyst],
+        tools=[approve_pending],
+        model=model,
+    )
+
+
+def settle(board: Board, card: Card, ledger: Ledger, said: str) -> None:
+    if card.pending:
+        board.move(card, "Needs you", f"refund of {card.pending['charge']} waits for a human")
+    elif not ledger.duplicates(card.customer):
+        board.move(card, "Done", "the ledger shows one charge per order")
+    else:
+        extra = ", ".join(ledger.duplicates(card.customer))
+        board.move(card, "Backlog", f"agent said: {said[:80]!r}; the ledger still shows {extra}")
+
+
+async def work(
+    board: Board, card: Card, ledger: Ledger, readers: Readers, model: Model | str | None = None
+) -> Card:
+    board.move(card, "In flight", f"{MANAGER} picked it up")
+    shift = Shift(readers, ledger=ledger, card=card)
+    prompt = f"Card {card.id}: {card.title}\nCustomer: {card.customer}\nLinked issue: {card.issue}"
+    try:
+        result = await Runner.run(manager(model), prompt, context=shift, max_turns=12)
+        usage, ok, said = result.context_wrapper.usage, True, str(result.final_output)
+        card.employee = result.last_agent.name
+    except AgentsException as e:
+        run = e.run_data
+        usage, ok, said = (run.context_wrapper.usage if run else Usage()), False, f"run failed: {e}"
+    card.runs.append(
+        Run(card.employee or MANAGER, usage.input_tokens, usage.output_tokens, price(usage), ok, said)
+    )
+    card.log.extend(f"Gate: {a}" for a in shift.attempts)
+    settle(board, card, ledger, said)
+    return card
+
+
+Approver = Callable[[Card], Awaitable[tuple[str, bool]]]
+
+
+async def ask_human(board: Board, card: Card, ledger: Ledger, approver: Approver) -> Card:
+    by, yes = await approver(card)
+    board.move(card, "In flight", decide(card, ledger, by=by, approve=yes))
+    settle(board, card, ledger, "approved" if yes else "declined")
+    return card
+
+
+SEED = Card("C-1", "Customer charged twice at checkout", "cus_812", "GH#412, PAY-88")
+
+
+async def console(card: Card) -> tuple[str, bool]:
+    p = card.pending
+    answer = await asyncio.to_thread(input, f"Approve refund of {p['charge']} ({p['reason']})? [y/N] ")
+    return os.environ.get("USER", "human"), answer.strip().lower() == "y"
+
+
+async def demo(fresh: bool) -> None:
+    from workforce.telegram import Telegram
+
+    if fresh:
+        for f in ("board.json", "ledger.json"):
+            (STATE / f).unlink(missing_ok=True)
+    board, ledger = Board.open(STATE / "board.json"), Ledger.open(STATE / "ledger.json")
+    if not board.cards:
+        board.cards.append(replace(SEED, runs=[], log=[]))
+        board.save()
+    approver = Telegram.from_env() or console
+    for card in [c for c in board.cards if c.column in ("Backlog", "Needs you")]:
+        if card.column == "Backlog":
+            await work(board, card, ledger, Readers.from_env(user="U_ENG"))
+        if card.column == "Needs you":
+            await ask_human(board, card, ledger, approver)
+        print(f"{card.id} {card.column}: {card.log[-1]}")
+    cpo = board.cost_per_outcome
+    print("cost per outcome:", "no outcome yet" if cpo is None else f"${cpo:.4f}")
+
+
+if __name__ == "__main__":
+    cli = argparse.ArgumentParser(description="Work the board, or serve it")
+    cli.add_argument("--serve", action="store_true", help="serve the board on http://127.0.0.1:8080")
+    cli.add_argument("--fresh", action="store_true", help="start from the fixture ledger and one card")
+    args = cli.parse_args()
+    if args.serve:
+        serve(STATE)
+    else:
+        asyncio.run(demo(args.fresh))

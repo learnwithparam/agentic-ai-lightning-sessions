@@ -1,7 +1,7 @@
 [project]
-name = "ai-workforce"
+name = "mission-control"
 version = "0.1.0"
-description = "Agentic AI workforce by learnwithparam.com: the system the buildcamp, workshops and Live Labs build"
+description = "AI employees that resolve customer billing issues: refunds wait for a human, and a card closes only when the payments ledger agrees"
 requires-python = ">=3.13"
 dependencies = [
     "aiohttp==3.14.4",

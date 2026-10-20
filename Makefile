@@ -1,18 +1,12 @@
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
+BUILT := $(shell python3 -c "import tomllib;print(' '.join(s['folder'] for s in tomllib.load(open('sessions.toml','rb'))['session'] if s['built']))")
 
-.PHONY: help check ask slack
+.PHONY: help check
 
 help: ## List every target
 	@grep -E '^[a-z0-9-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[33m%-8s\033[0m %s\n", $$1, $$2}'
 
-check: ## Lint, format, and every step's acceptance test (no keys, no model spend)
-	uv run --quiet ruff check .
-	uv run --quiet ruff format --check .
-	uv run --quiet pytest
-
-ask: ## Ask one question as a user: make ask Q="is the double charge known?" AS=U_CONTRACTOR
-	WORKFORCE_USER=$(or $(AS),U_ENG) uv run --quiet --env-file .env python -m workforce.cli "$(Q)"
-
-slack: ## Run the analyst in your Slack workspace over Socket Mode
-	uv run --quiet --env-file .env python -m workforce.slack_app
+check: ## The session index, then every built session's own gate
+	python3 scripts/check_sessions.py
+	@for d in $(BUILT); do echo "== $$d"; $(MAKE) -C $$d check || exit 1; done
