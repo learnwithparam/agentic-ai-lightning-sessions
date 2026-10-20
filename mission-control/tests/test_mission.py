@@ -210,3 +210,14 @@ def test_a_question_card_is_done_only_when_its_answer_cites_a_source_the_analyst
         work(board, card, ledger, Readers("acme", "U_ENG"), model=analyst_answers("It is fixed [GH#1]."))
     )
     assert card.column == "Backlog" and "cited no source" in card.log[-1]
+
+
+def test_a_card_the_manager_keeps_goes_back_to_backlog(desk):
+    board, _, ledger = desk
+    card = replace(QUESTION, runs=[], log=[], sources=[])
+    board.cards.append(card)
+    itself = ScriptedModel([[assistant_message("Yes, it is a known bug [GH#412].")]], default_usage=TOKENS)
+
+    # A question has no customer, so without this the empty ledger check would close it.
+    asyncio.run(work(board, card, ledger, Readers("acme", "U_ENG"), model=itself))
+    assert card.column == "Backlog" and card.log[-1] == "Backlog: no employee took the card"

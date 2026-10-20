@@ -158,10 +158,14 @@ async def work(
         Run(card.employee or MANAGER, usage.input_tokens, usage.output_tokens, price(usage), ok, said)
     )
     card.log.extend(f"Gate: {a}" for a in shift.attempts)
-    if card.employee == ANALYST:
-        answer(board, card, check_citations(said, shift.read))
-    else:
+    # The card's kind picks the check, not who took it: a question has no customer, and an empty
+    # customer has no duplicates, so the ledger would close a question nobody answered.
+    if card.employee in ("", MANAGER) and not card.pending:
+        board.move(card, "Backlog", "no employee took the card" if ok else said[:80])
+    elif card.customer:
         settle(board, card, ledger, said)
+    else:
+        answer(board, card, check_citations(said, shift.read))
     return card
 
 
