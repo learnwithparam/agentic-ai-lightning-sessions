@@ -10,6 +10,7 @@ from __future__ import annotations
 import html
 import json
 import os
+import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -102,12 +103,17 @@ def usd(x: float) -> str:
     return f"${x:.4f}" if x < 1 else f"${x:,.2f}"
 
 
+def plain(text: str) -> str:
+    """The answer as prose: models add markdown even when told not to, and the board prints text."""
+    return re.sub(r"\*\*|__|^#+\s*|^\s*[-*]\s+", "", text, flags=re.M)
+
+
 def answered(c: Card) -> str:
     """What closed a question card: the answer, and only the sources the analyst read in that run."""
     refs = "".join(f'<span class="chip grey">{html.escape(s)}</span>' for s in c.sources)
     return (
         '<div class="receipt"><h4><svg class="ck" viewBox="0 0 16 16"><path d="M3 8.5 6.5 12 13 4.5"/></svg>'
-        f"Answered from sources it read</h4><p>{html.escape(c.answer[:400])}</p>"
+        f"Answered from sources it read</h4><p>{html.escape(plain(c.answer)[:400])}</p>"
         f'<div class="refs">{refs}</div></div>'
     )
 

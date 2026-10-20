@@ -196,13 +196,14 @@ def test_a_question_card_is_done_only_when_its_answer_cites_a_source_the_analyst
     card = replace(QUESTION, runs=[], log=[], sources=[])
     board.cards.append(card)
 
-    said = "Known: the retry path makes a new idempotency key [PAY-88]. Fixed in [GH#999]."
+    said = "**Known:** the retry path makes a new idempotency key [PAY-88]. Fixed in [GH#999]."
     asyncio.run(work(board, card, ledger, Readers("acme", "U_ENG"), model=analyst_answers(said)))
 
     # The manager handed the question to the analyst, which read Linear; the id it never read is cut.
     assert card.employee == "Engineering analyst" and card.column == "Done"
     assert card.sources == ["PAY-88"] and "GH#999" not in card.answer
-    assert "Answered from sources it read" in render(board, ledger) and ledger.refunds == []
+    page = render(board, ledger)
+    assert "Answered from sources it read" in page and "<p>Known: the retry" in page and ledger.refunds == []
 
     card.column = "Backlog"
     asyncio.run(

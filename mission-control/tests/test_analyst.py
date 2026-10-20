@@ -99,6 +99,16 @@ def test_citations_are_kept_only_for_sources_read_in_this_run():
     assert r.text == "Fixed in [PAY-88] and."
 
 
+def test_a_read_source_counts_with_a_typographic_hyphen_or_without_brackets():
+    read = {
+        "doc:payments-retries": Source("doc:payments-retries", "docs", "t", "x", "u"),
+        "GH#412": Source("GH#412", "github", "t", "x", "u"),
+    }
+    r = check_citations("See [doc:payments\u2011retries], tracked as (GH#412), not [GH\u2011999].", read)
+    assert [s.id for s in r.sources] == ["doc:payments-retries", "GH#412"] and r.dropped == ["GH-999"]
+    assert check_citations("Nothing found for GH#4120.", read).sources == []
+
+
 def test_search_never_returns_a_row_that_matches_no_term():
     assert rank(fixture_github("acme"), "kubernetes helm chart", ENG) == []
     assert [s.id for s in rank(fixture_github("acme"), "checkout retry charges", ENG)][0] == "GH#412"

@@ -18,7 +18,8 @@ from workforce.sources import Readers, Source
 INSTRUCTIONS = """Answer engineering questions from company tools.
 - Search GitHub, Linear and the docs before answering.
 - Search again with other words if a search finds nothing.
-- Use only what the searches return. Cite each fact with its source id in square brackets, like [PAY-88].
+- Do every search before you reply. Your reply is final, so never say you will search next.
+- Use only what the searches return. End each sentence with its source id in brackets, like [PAY-88].
 - If nothing relevant comes back, say what you searched and that you found nothing.
 - Keep it short, in plain sentences with no markdown: the answer first, then what to do next."""
 
@@ -73,18 +74,25 @@ class Reply:
 
 
 CITE = re.compile(r"\[([^\[\]]+)\]")
+# Models write ids with typographic hyphens (payments\u2011retries); those are the same id it read.
+DASHES = str.maketrans(dict.fromkeys("\u2010\u2011\u2012\u2013\u2014\u2212", "-"))
 
 
 def check_citations(text: str, read: dict[str, Source]) -> Reply:
     cited, dropped = [], []
     for m in CITE.finditer(text):
-        sid = m.group(1)
+        sid = m.group(1).translate(DASHES)
         if sid in read:
             if read[sid] not in cited:
                 cited.append(read[sid])
         elif sid not in dropped:
             dropped.append(sid)
-    clean = CITE.sub(lambda m: m.group(0) if m.group(1) in read else "", text)
+    # A read source named without brackets, "(GH#412)", is still a source this run read.
+    plain = text.translate(DASHES)
+    for sid, src in read.items():
+        if src not in cited and re.search(rf"(?<![\w#-]){re.escape(sid)}(?![\w-])", plain):
+            cited.append(src)
+    clean = CITE.sub(lambda m: m.group(0) if m.group(1).translate(DASHES) in read else "", text)
     return Reply(re.sub(r"[ \t]+([.,;:])", r"\1", clean).strip(), cited, dropped)
 
 
