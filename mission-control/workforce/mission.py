@@ -216,10 +216,10 @@ async def demo(fresh: bool, ask: str = "telegram") -> None:
     # Every card is worked before anyone is asked, so a question is answered while a refund waits.
     for card in [c for c in board.cards if c.column == "Backlog"]:
         await work(board, card, ledger, Readers.from_env(user="U_ENG"))
-        print(f"{card.id} {card.column}: {card.log[-1]}")
+        print(f"{card.id} {card.log[-1]}")
     for card in [c for c in board.cards if c.column == "Needs you"]:
         await ask_human(board, card, ledger, approver)
-        print(f"{card.id} {card.column}: {card.log[-1]}")
+        print(f"{card.id} {card.log[-1]}")
     cpo = board.cost_per_outcome
     print("cost per outcome:", "no outcome yet" if cpo is None else f"${cpo:.4f}")
 
