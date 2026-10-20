@@ -7,12 +7,12 @@ Memory is the SDK session: one per Slack thread, so a follow-up question sees th
 
 from __future__ import annotations
 
-import os
 import re
 from dataclasses import dataclass, field
 
 from agents import Agent, Model, RunContextWrapper, Runner, Session, function_tool
 
+from workforce import default_model
 from workforce.sources import Readers, Source
 
 INSTRUCTIONS = """Answer engineering questions from company tools.
@@ -20,7 +20,7 @@ INSTRUCTIONS = """Answer engineering questions from company tools.
 - Search again with other words if a search finds nothing.
 - Use only what the searches return. Cite each fact with its source id in square brackets, like [PAY-88].
 - If nothing relevant comes back, say what you searched and that you found nothing.
-- Keep it short: the answer first, then what to do next."""
+- Keep it short, in plain sentences with no markdown: the answer first, then what to do next."""
 
 
 @dataclass
@@ -61,7 +61,7 @@ def analyst(model: Model | str | None = None) -> Agent[Desk]:
         name="Engineering analyst",
         instructions=INSTRUCTIONS,
         tools=[search_github, search_linear, search_docs],
-        model=model or os.environ.get("WORKFORCE_MODEL", "gpt-5-mini"),
+        model=model or default_model(),
     )
 
 

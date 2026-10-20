@@ -11,7 +11,7 @@ from agents.testing import ScriptedModel, assistant_message, function_call
 
 from workforce.board import Board, render
 from workforce.ledger import Ledger
-from workforce.mission import SEED, NotAllowed, ask_human, decide, work
+from workforce.mission import QUESTION, SEED, NotAllowed, ask_human, decide, work
 from workforce.sources import Readers
 from workforce.telegram import Telegram
 
@@ -177,3 +177,35 @@ def test_telegram_counts_only_a_tap_on_this_cards_message_in_the_chat():
     assert (by, yes) == ("telegram:param", True)
     buttons = sent[0][1]["reply_markup"]["inline_keyboard"][0]
     assert [b["callback_data"] for b in buttons] == ["C-1:yes", "C-1:no"]
+
+
+def analyst_answers(text):
+    return ScriptedModel(
+        [
+            [function_call("transfer_to_engineering_analyst", {}, call_id="h1")],
+            [function_call("search_linear", {"query": "double charge"}, call_id="s1")],
+            [assistant_message(text)],
+        ],
+        default_usage=TOKENS,
+    )
+
+
+@pytest.mark.lab("build-an-ai-mission-control-app")
+def test_a_question_card_is_done_only_when_its_answer_cites_a_source_the_analyst_read(desk):
+    board, _, ledger = desk
+    card = replace(QUESTION, runs=[], log=[], sources=[])
+    board.cards.append(card)
+
+    said = "Known: the retry path makes a new idempotency key [PAY-88]. Fixed in [GH#999]."
+    asyncio.run(work(board, card, ledger, Readers("acme", "U_ENG"), model=analyst_answers(said)))
+
+    # The manager handed the question to the analyst, which read Linear; the id it never read is cut.
+    assert card.employee == "Engineering analyst" and card.column == "Done"
+    assert card.sources == ["PAY-88"] and "GH#999" not in card.answer
+    assert "Answered from sources it read" in render(board, ledger) and ledger.refunds == []
+
+    card.column = "Backlog"
+    asyncio.run(
+        work(board, card, ledger, Readers("acme", "U_ENG"), model=analyst_answers("It is fixed [GH#1]."))
+    )
+    assert card.column == "Backlog" and "cited no source" in card.log[-1]

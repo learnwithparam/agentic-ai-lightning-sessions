@@ -49,6 +49,8 @@ class Card:
     pending: dict | None = None
     runs: list[Run] = field(default_factory=list)
     log: list[str] = field(default_factory=list)
+    answer: str = ""
+    sources: list[str] = field(default_factory=list)
 
     @property
     def cost(self) -> float:
@@ -100,6 +102,16 @@ def usd(x: float) -> str:
     return f"${x:.4f}" if x < 1 else f"${x:,.2f}"
 
 
+def answered(c: Card) -> str:
+    """What closed a question card: the answer, and only the sources the analyst read in that run."""
+    refs = "".join(f'<span class="chip grey">{html.escape(s)}</span>' for s in c.sources)
+    return (
+        '<div class="receipt"><h4><svg class="ck" viewBox="0 0 16 16"><path d="M3 8.5 6.5 12 13 4.5"/></svg>'
+        f"Answered from sources it read</h4><p>{html.escape(c.answer[:400])}</p>"
+        f'<div class="refs">{refs}</div></div>'
+    )
+
+
 def receipt(c: Card, ledger: Ledger) -> str:
     """The ledger rows that closed the card: what was kept and what was refunded, and who approved it."""
     refunded = {r["charge"]: r for r in ledger.refunds}
@@ -142,7 +154,9 @@ def card_html(c: Card, ledger: Ledger | None) -> str:
     tone = "block past" if c.column == "Done" else "block"
     body += "".join(f'<p class="{tone}">Gate refused: {html.escape(g)}</p>' for g in gate[-1:])
     body += "</article>"
-    if c.column == "Done" and ledger is not None:
+    if c.column == "Done" and c.sources:
+        body += answered(c)
+    elif c.column == "Done" and ledger is not None:
         body += receipt(c, ledger)
     return body
 

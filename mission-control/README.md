@@ -10,8 +10,9 @@ reaches Done carries the ledger rows that prove it.
 
 ```
 make check                         # lint and every step's test, offline: no keys, no spend
-cp .env.example .env               # then fill in the model key, prices and Telegram bot
-make demo FRESH=1                  # work the card; approve on Telegram, or in the terminal without a bot
+cp .env.example .env               # then fill in the OpenRouter key, prices and Telegram bot
+make demo FRESH=1                  # work the board; approve the refund on Telegram
+make demo FRESH=1 ASK=terminal     # the same, approving in this terminal
 make board                         # the board on http://127.0.0.1:8080
 ```
 
@@ -21,7 +22,11 @@ A customer was charged twice at checkout. The manager hands the card to the supp
 finds the second charge on the same order and requests a refund. A refund cannot be undone, so the
 card moves to Needs you and asks on Telegram. The approval rule is code (`mission.decide`), not a
 prompt: the manager tries to approve and is refused. After your tap, the card reaches Done only if the
-ledger shows one charge per order (`mission.settle`). Cost per outcome is every run's cost divided by
+ledger shows one charge per order (`mission.settle`).
+
+A second card asks whether the double charge is a known bug and who owns the fix. The manager hands it
+to the engineering analyst, which searches GitHub, Linear and the docs. It reaches Done only when the
+answer cites a source the analyst read in that run (`mission.answer`). Cost per outcome is every run's cost divided by
 the cards in Done.
 
 ## Built in earlier sessions
