@@ -2,41 +2,111 @@
   "model": {
     "schema_version": "1.1",
     "type_definitions": [
-      { "type": "user" },
-      { "type": "agent" },
+      {
+        "type": "user"
+      },
+      {
+        "type": "agent"
+      },
       {
         "type": "desk",
         "relations": {
-          "staff": { "this": {} },
-          "employee": { "this": {} },
-          "approver": { "this": {} },
+          "staff": {
+            "this": {}
+          },
+          "employee": {
+            "this": {}
+          },
+          "approver": {
+            "this": {}
+          },
           "can_approve": {
             "intersection": {
               "child": [
-                { "computedUserset": { "relation": "approver" } },
-                { "computedUserset": { "relation": "staff" } }
+                {
+                  "computedUserset": {
+                    "relation": "approver"
+                  }
+                },
+                {
+                  "computedUserset": {
+                    "relation": "staff"
+                  }
+                }
               ]
             }
           }
         },
         "metadata": {
           "relations": {
-            "staff": { "directly_related_user_types": [{ "type": "user" }] },
-            "employee": { "directly_related_user_types": [{ "type": "agent" }] },
-            "approver": { "directly_related_user_types": [{ "type": "user" }] },
-            "can_approve": { "directly_related_user_types": [] }
+            "staff": {
+              "directly_related_user_types": [
+                {
+                  "type": "user"
+                }
+              ]
+            },
+            "employee": {
+              "directly_related_user_types": [
+                {
+                  "type": "agent"
+                }
+              ]
+            },
+            "approver": {
+              "directly_related_user_types": [
+                {
+                  "type": "user"
+                }
+              ]
+            },
+            "can_approve": {
+              "directly_related_user_types": []
+            }
           }
         }
       }
     ]
   },
   "tuples": [
-    { "user": "user:param", "relation": "staff", "object": "desk:billing" },
-    { "user": "user:param", "relation": "staff", "object": "desk:engineering" },
-    { "user": "user:param", "relation": "approver", "object": "desk:billing" },
-    { "user": "user:sam", "relation": "staff", "object": "desk:engineering" },
-    { "user": "user:sam", "relation": "approver", "object": "desk:billing" },
-    { "user": "agent:support-resolver", "relation": "employee", "object": "desk:billing" },
-    { "user": "agent:engineering-analyst", "relation": "employee", "object": "desk:engineering" }
-  ]
+    {
+      "user": "user:param",
+      "relation": "staff",
+      "object": "desk:billing"
+    },
+    {
+      "user": "user:param",
+      "relation": "staff",
+      "object": "desk:engineering"
+    },
+    {
+      "user": "user:param",
+      "relation": "approver",
+      "object": "desk:billing"
+    },
+    {
+      "user": "user:sam",
+      "relation": "staff",
+      "object": "desk:engineering"
+    },
+    {
+      "user": "user:sam",
+      "relation": "approver",
+      "object": "desk:billing"
+    },
+    {
+      "user": "agent:support-resolver",
+      "relation": "employee",
+      "object": "desk:billing"
+    },
+    {
+      "user": "agent:engineering-analyst",
+      "relation": "employee",
+      "object": "desk:engineering"
+    }
+  ],
+  "approvers": {
+    "terminal:param": "param",
+    "terminal:sam": "sam"
+  }
 }

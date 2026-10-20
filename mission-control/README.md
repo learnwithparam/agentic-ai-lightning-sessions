@@ -49,8 +49,9 @@ STACK=1 ASK=terminal FRESH=1 make demo       # signs in as param; MISSION_USER=s
 make stack-check                             # the promise as a test, against the running stack
 ```
 
-With the stack on, the approver's name (the terminal user, or the Telegram username) must be an
-OpenFGA user who can approve. Without `STACK=1` the board runs exactly as in the Lightning session.
+With the stack on, an approver counts only when `approvers` in `deploy/policy.json` maps their channel
+id to an OpenFGA user who can approve, such as `terminal:param`. Add a Telegram tapper by numeric id:
+`MISSION_APPROVERS=telegram:123456789=param`. A Telegram username is never used, since anyone can take one. Without `STACK=1` the board runs exactly as in the Lightning session.
 
 ## Built in earlier sessions
 

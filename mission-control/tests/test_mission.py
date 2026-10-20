@@ -174,7 +174,7 @@ def test_telegram_counts_only_a_tap_on_this_cards_message_in_the_chat():
 
     by, yes = asyncio.run(Telegram(1, call)(card))
 
-    assert (by, yes) == ("telegram:param", True)
+    assert (by, yes) == ("telegram:7", True)
     buttons = sent[0][1]["reply_markup"]["inline_keyboard"][0]
     assert [b["callback_data"] for b in buttons] == ["C-1:yes", "C-1:no"]
 

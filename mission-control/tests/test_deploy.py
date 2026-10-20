@@ -37,7 +37,8 @@ FACTS = {
 
 
 def fake(user: str) -> Access:
-    return Access(lambda *fact: fact in FACTS, lambda agent: Badge(client_id(agent), user), user)
+    approvers = {"telegram:7": "param", "telegram:8": "sam"}
+    return Access(lambda *fact: fact in FACTS, lambda agent: Badge(client_id(agent), user), user, approvers)
 
 
 @pytest.fixture
@@ -81,12 +82,19 @@ def test_an_approver_openfga_refuses_leaves_the_refund_waiting(desk):
     assert card.column == "Needs you"
 
     async def sam(card):
-        return "telegram:sam", True
+        return "telegram:8", True
 
     asyncio.run(ask_human(board, card, ledger, sam, fake("param")))
 
     assert ledger.refunds == [] and card.column == "Needs you" and card.pending
-    assert "telegram:sam may not approve refunds" in card.log[-1]
+    assert "telegram:8 may not approve refunds" in card.log[-1]
+
+    async def renamed(card):
+        return "telegram:param", True
+
+    # A Telegram account renamed to param is still not param: only a mapped id counts.
+    asyncio.run(ask_human(board, card, ledger, renamed, fake("param")))
+    assert ledger.refunds == [] and card.column == "Needs you"
 
 
 @pytest.fixture

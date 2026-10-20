@@ -134,6 +134,7 @@ class Access:
     check: Check
     badge: Callable[[str], Badge]
     user: str = ""
+    approvers: dict[str, str] = field(default_factory=dict)
 
     def refuse(self, agent: str, tool: str) -> str | None:
         """Why this employee may not run this tool for this person, or None when it may."""
@@ -148,8 +149,10 @@ class Access:
         return None
 
     def may_approve(self, who: str, desk: str = "billing") -> bool:
-        # The approver arrives as channel:name (telegram:param); the name is the OpenFGA user.
-        return self.check(f"user:{who.split(':')[-1]}", "can_approve", f"desk:{desk}")
+        # A channel id (telegram:<numeric id>) is not a person until policy.json or MISSION_APPROVERS
+        # names one, so a renamed Telegram account or an unknown tapper is refused.
+        user = self.approvers.get(who)
+        return user is not None and self.check(f"user:{user}", "can_approve", f"desk:{desk}")
 
     @classmethod
     def from_env(cls, user: str = "", password: str = "") -> Access | None:
@@ -170,4 +173,7 @@ class Access:
                 badges[agent] = keycloak.badge(token, agent)
             return badges[agent]
 
-        return cls(policy.check, badge, user)
+        approvers = json.loads(POLICY.read_text())["approvers"] | dict(
+            pair.split("=", 1) for pair in os.environ.get("MISSION_APPROVERS", "").split(",") if "=" in pair
+        )
+        return cls(policy.check, badge, user, approvers)

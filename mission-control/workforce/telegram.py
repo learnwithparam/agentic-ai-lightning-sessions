@@ -1,8 +1,8 @@
 """Approval on Telegram: the pending action as a message with Approve and Decline buttons.
 
 The answer is read by long-polling getUpdates, so the demo needs no public URL. Only a tap in
-TELEGRAM_CHAT_ID on this card's buttons counts; the tapper's Telegram name is who approved it, which is
-what the ledger records.
+TELEGRAM_CHAT_ID on this card's buttons counts. Who approved is the tapper's numeric Telegram id, which
+the ledger records: a username is whatever its owner types, so it cannot name an approver.
 """
 
 from __future__ import annotations
@@ -78,7 +78,6 @@ class Telegram:
                     f"{card.id}:no",
                 ):
                     continue
-                who = q["from"].get("username") or str(q["from"]["id"])
                 yes = q["data"].endswith(":yes")
                 await asyncio.to_thread(self.call, "answerCallbackQuery", {"callback_query_id": q["id"]})
                 await asyncio.to_thread(
@@ -86,4 +85,4 @@ class Telegram:
                     "editMessageReplyMarkup",
                     {"chat_id": self.chat_id, "message_id": msg["message_id"], "reply_markup": {}},
                 )
-                return f"telegram:{who}", yes
+                return f"telegram:{q['from']['id']}", yes
