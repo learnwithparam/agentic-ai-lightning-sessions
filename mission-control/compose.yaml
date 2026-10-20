@@ -1,0 +1,169 @@
+# The production stack around the board: Keycloak signs each AI employee in as itself, OpenFGA checks
+# every action, Langfuse keeps every run. Langfuse is trimmed from its official docker-compose.yml.
+# Every password and key below is a local default for a laptop. Change every one before a server.
+name: mission-control
+
+x-langfuse-env: &langfuse-env
+  NEXTAUTH_URL: http://localhost:8270
+  DATABASE_URL: postgresql://postgres:postgres@postgres:5432/postgres
+  SALT: acme-local-salt
+  ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+  TELEMETRY_ENABLED: "false"
+  CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
+  CLICKHOUSE_URL: http://clickhouse:8123
+  CLICKHOUSE_USER: clickhouse
+  CLICKHOUSE_PASSWORD: clickhouse
+  CLICKHOUSE_CLUSTER_ENABLED: "false"
+  LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+  LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: minio
+  LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: miniosecret
+  LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
+  LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+  LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+  LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: minio
+  LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: miniosecret
+  LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://minio:9000
+  LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_AUTH: myredissecret
+
+x-depends: &depends
+  postgres:
+    condition: service_healthy
+  minio:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+  clickhouse:
+    condition: service_healthy
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.5
+    command: start-dev --import-realm --http-port 8180 --health-enabled true
+    ports:
+      - 127.0.0.1:8180:8180
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin-local
+    volumes:
+      - ./deploy/realm.json:/opt/keycloak/data/import/acme.json:ro
+    healthcheck:
+      # The image has no curl; bash's /dev/tcp asks the management port for /health/ready.
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q UP <&3"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  openfga:
+    image: openfga/openfga:v1.21.0
+    command: run --datastore-engine memory --playground-enabled=false
+    ports:
+      - 127.0.0.1:8185:8080
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/grpc_health_probe", "-addr=127.0.0.1:8081"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  langfuse-worker:
+    image: docker.io/langfuse/langfuse-worker:4.48.0
+    depends_on: *depends
+    environment: *langfuse-env
+
+  langfuse-web:
+    image: docker.io/langfuse/langfuse:4.48.0
+    depends_on: *depends
+    ports:
+      - 127.0.0.1:8270:3000
+    environment:
+      <<: *langfuse-env
+      # Next binds to the container's hostname by default, so the loopback healthcheck below never answers.
+      HOSTNAME: 0.0.0.0
+      NEXTAUTH_SECRET: acme-local-nextauth
+      # Headless setup: the org, project, API keys and one login exist on first start, so no clicking.
+      LANGFUSE_INIT_ORG_ID: acme
+      LANGFUSE_INIT_ORG_NAME: Acme
+      LANGFUSE_INIT_PROJECT_ID: mission-control
+      LANGFUSE_INIT_PROJECT_NAME: Mission Control
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: pk-lf-acme-local
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: sk-lf-acme-local
+      LANGFUSE_INIT_USER_EMAIL: billing@acme.example
+      LANGFUSE_INIT_USER_NAME: Acme billing
+      LANGFUSE_INIT_USER_PASSWORD: acme-local
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/api/public/health || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  clickhouse:
+    image: docker.io/clickhouse/clickhouse-server:25.12.11.4-alpine
+    user: "101:101"
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse_logs:/var/log/clickhouse-server
+    healthcheck:
+      # 127.0.0.1, not localhost: Docker Desktop has no IPv6 inside the VM, so ClickHouse binds IPv4 only.
+      test: wget --no-verbose --tries=1 --spider http://127.0.0.1:8123/ping || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 1s
+
+  minio:
+    image: cgr.dev/chainguard/minio:latest@sha256:2136d593beacf4461187035eca949fe49abd589d5079735025c711ca58fee0c8
+    entrypoint: sh
+    # The bucket has to exist before Langfuse writes its first event.
+    command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data'
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: miniosecret
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+      start_period: 1s
+
+  redis:
+    image: docker.io/redis:7.4.10-alpine
+    command: --requirepass myredissecret --maxmemory-policy noeviction
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "myredissecret", "ping"]
+      interval: 3s
+      timeout: 10s
+      retries: 10
+
+  postgres:
+    image: docker.io/postgres:17.10-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+      TZ: UTC
+      PGTZ: UTC
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres_data:
+  clickhouse_data:
+  clickhouse_logs:
+  minio_data:

@@ -12,12 +12,14 @@ import argparse
 import asyncio
 import os
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
-from agents import Agent, AgentsException, Model, RunContextWrapper, Runner, Usage, function_tool
+from agents import Agent, AgentsException, Model, RunConfig, RunContextWrapper, Runner, Usage, function_tool
+from agents.tool_context import ToolContext
 
 from workforce import default_model
+from workforce.access import Access
 from workforce.analyst import INSTRUCTIONS as ANALYST_INSTRUCTIONS
 from workforce.analyst import Desk, Reply, check_citations, search_docs, search_github, search_linear
 from workforce.board import Board, Card, Run, price, serve
@@ -39,7 +41,6 @@ class Shift(Desk):
 
     ledger: Ledger | None = None
     card: Card | None = None
-    attempts: list[str] = field(default_factory=list)
 
 
 def decide(card: Card, ledger: Ledger, by: str, approve: bool) -> str:
@@ -56,8 +57,10 @@ def decide(card: Card, ledger: Ledger, by: str, approve: bool) -> str:
 
 
 @function_tool
-def find_charges(ctx: RunContextWrapper[Shift], customer: str) -> str:
+def find_charges(ctx: ToolContext[Shift], customer: str) -> str:
     """List a customer's charges in the payments ledger, with the order each belongs to."""
+    if refused := ctx.context.refused(ctx):
+        return refused
     rows = [c for c in ctx.context.ledger.charges if c["customer"] == customer]
     if not rows:
         return f"No charges for {customer}."
@@ -69,9 +72,11 @@ def find_charges(ctx: RunContextWrapper[Shift], customer: str) -> str:
 
 
 @function_tool
-def request_refund(ctx: RunContextWrapper[Shift], charge_id: str, reason: str) -> str:
+def request_refund(ctx: ToolContext[Shift], charge_id: str, reason: str) -> str:
     """Ask a human to approve refunding one charge. The refund happens only after they approve."""
     shift = ctx.context
+    if refused := shift.refused(ctx):
+        return refused
     try:
         charge = shift.ledger.charge(charge_id)
     except KeyError:
@@ -142,13 +147,24 @@ def settle(board: Board, card: Card, ledger: Ledger, said: str) -> None:
 
 
 async def work(
-    board: Board, card: Card, ledger: Ledger, readers: Readers, model: Model | str | None = None
+    board: Board,
+    card: Card,
+    ledger: Ledger,
+    readers: Readers,
+    model: Model | str | None = None,
+    access: Access | None = None,
 ) -> Card:
     board.move(card, "In flight", f"{MANAGER} picked it up")
-    shift = Shift(readers, ledger=ledger, card=card)
+    shift = Shift(readers, access=access, ledger=ledger, card=card)
     prompt = f"Card {card.id}: {card.title}\nCustomer: {card.customer}\nLinked issue: {card.issue}"
+    # The card is the trace's group, so every run on one card reads as one session in Langfuse.
+    traced = RunConfig(
+        workflow_name=f"{card.id} {card.title}",
+        group_id=card.id,
+        trace_metadata={"card": card.id, "user": access.user if access else readers.user},
+    )
     try:
-        result = await Runner.run(manager(model), prompt, context=shift, max_turns=12)
+        result = await Runner.run(manager(model), prompt, context=shift, max_turns=12, run_config=traced)
         usage, ok, said = result.context_wrapper.usage, True, str(result.final_output)
         card.employee = result.last_agent.name
     except AgentsException as e:
@@ -184,8 +200,14 @@ def answer(board: Board, card: Card, reply: Reply) -> None:
 Approver = Callable[[Card], Awaitable[tuple[str, bool]]]
 
 
-async def ask_human(board: Board, card: Card, ledger: Ledger, approver: Approver) -> Card:
+async def ask_human(
+    board: Board, card: Card, ledger: Ledger, approver: Approver, access: Access | None = None
+) -> Card:
     by, yes = await approver(card)
+    # Being a human is not enough with the stack on: OpenFGA must say this person approves billing.
+    if access and not access.may_approve(by):
+        board.move(card, "Needs you", f"{by} may not approve refunds on the billing desk")
+        return card
     board.move(card, "In flight", decide(card, ledger, by=by, approve=yes))
     settle(board, card, ledger, "approved" if yes else "declined")
     return card
@@ -213,12 +235,13 @@ async def demo(fresh: bool, ask: str = "telegram") -> None:
         board.save()
     # The approver is any async card -> (who, yes); Telegram when a bot is set, else this terminal.
     approver = (ask == "telegram" and Telegram.from_env()) or console
+    access = Access.from_env()
     # Every card is worked before anyone is asked, so a question is answered while a refund waits.
     for card in [c for c in board.cards if c.column == "Backlog"]:
-        await work(board, card, ledger, Readers.from_env(user="U_ENG"))
+        await work(board, card, ledger, Readers.from_env(user="U_ENG"), access=access)
         print(f"{card.id} {card.log[-1]}")
     for card in [c for c in board.cards if c.column == "Needs you"]:
-        await ask_human(board, card, ledger, approver)
+        await ask_human(board, card, ledger, approver, access)
         print(f"{card.id} {card.log[-1]}")
     cpo = board.cost_per_outcome
     print("cost per outcome:", "no outcome yet" if cpo is None else f"${cpo:.4f}")

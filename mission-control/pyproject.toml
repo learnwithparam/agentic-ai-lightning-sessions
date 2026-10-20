@@ -21,8 +21,11 @@ package = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
-addopts = "--import-mode=importlib -q --strict-markers"
-markers = ["lab(slug): the acceptance test for one Live Lab, named in steps.toml"]
+addopts = "--import-mode=importlib -q --strict-markers -m 'not stack'"
+markers = [
+    "lab(slug): the acceptance test for one Live Lab, named in steps.toml",
+    "stack: needs make stack running; make stack-check runs these",
+]
 
 [tool.ruff]
 line-length = 110

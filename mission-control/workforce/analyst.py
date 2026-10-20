@@ -10,9 +10,11 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from agents import Agent, Model, RunContextWrapper, Runner, Session, function_tool
+from agents import Agent, Model, Runner, Session, function_tool
+from agents.tool_context import ToolContext
 
 from workforce import default_model
+from workforce.access import Access
 from workforce.sources import Readers, Source
 
 INSTRUCTIONS = """Answer engineering questions from company tools.
@@ -30,6 +32,16 @@ class Desk:
 
     readers: Readers
     read: dict[str, Source] = field(default_factory=dict)
+    access: Access | None = None
+    attempts: list[str] = field(default_factory=list)
+
+    def refused(self, ctx: ToolContext) -> str | None:
+        """Keycloak and OpenFGA's answer for the employee running this tool, when the stack is on."""
+        why = self.access.refuse(ctx.agent.name, ctx.tool_name) if self.access else None
+        if why:
+            self.attempts.append(why)
+            return f"Refused: {why}."
+        return None
 
     def keep(self, rows: list[Source]) -> str:
         for r in rows:
@@ -40,21 +52,21 @@ class Desk:
 
 
 @function_tool
-def search_github(ctx: RunContextWrapper[Desk], query: str) -> str:
+def search_github(ctx: ToolContext[Desk], query: str) -> str:
     """Search GitHub issues and pull requests."""
-    return ctx.context.keep(ctx.context.readers.github(query))
+    return ctx.context.refused(ctx) or ctx.context.keep(ctx.context.readers.github(query))
 
 
 @function_tool
-def search_linear(ctx: RunContextWrapper[Desk], query: str) -> str:
+def search_linear(ctx: ToolContext[Desk], query: str) -> str:
     """Search Linear issues: status, owner and plans."""
-    return ctx.context.keep(ctx.context.readers.linear(query))
+    return ctx.context.refused(ctx) or ctx.context.keep(ctx.context.readers.linear(query))
 
 
 @function_tool
-def search_docs(ctx: RunContextWrapper[Desk], query: str) -> str:
+def search_docs(ctx: ToolContext[Desk], query: str) -> str:
     """Search the engineering docs and runbooks."""
-    return ctx.context.keep(ctx.context.readers.docs(query))
+    return ctx.context.refused(ctx) or ctx.context.keep(ctx.context.readers.docs(query))
 
 
 def analyst(model: Model | str | None = None) -> Agent[Desk]:

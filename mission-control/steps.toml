@@ -18,3 +18,9 @@ slug = "decide-what-your-company-brain-can-see"
 session = "The analyst's permissions"
 promise = "The same question asked as an engineer and as a contractor is answered from different sources."
 built = true
+
+[[step]]
+slug = "deploy-agentic-ai-systems-for-engineers"
+session = "Workshop, Deploy AI Agents to Production"
+promise = "Each AI employee signs in through Keycloak as itself for one person, OpenFGA decides every tool call and every approval, and each run on a card is one Langfuse session with its tokens and cost."
+built = true

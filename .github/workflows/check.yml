@@ -1,0 +1,23 @@
+name: check
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - run: make check
+
+  # The deploy promise needs real Keycloak, OpenFGA and Langfuse, so it runs against compose.yaml here.
+  stack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - run: make -C mission-control stack-check
+      - if: failure()
+        run: docker compose -f mission-control/compose.yaml logs --tail 80

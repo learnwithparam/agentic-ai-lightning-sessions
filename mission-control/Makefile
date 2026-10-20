@@ -1,7 +1,11 @@
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
-.PHONY: help check ask slack demo board
+.PHONY: help check ask slack demo board stack stack-check
+
+# The stack's addresses and its local keys from compose.yaml; nothing here is a real secret.
+STACK_ENV := KEYCLOAK_URL=http://127.0.0.1:8180 OPENFGA_URL=http://127.0.0.1:8185 \
+	LANGFUSE_HOST=http://127.0.0.1:8270 LANGFUSE_PUBLIC_KEY=pk-lf-acme-local LANGFUSE_SECRET_KEY=sk-lf-acme-local
 
 help: ## List every target
 	@grep -E '^[a-z0-9-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[33m%-8s\033[0m %s\n", $$1, $$2}'
@@ -17,8 +21,14 @@ ask: ## Ask one question as a user: make ask Q="is the double charge known?" AS=
 slack: ## Run the analyst in your Slack workspace over Socket Mode
 	uv run --quiet --env-file .env python -m workforce.slack_app
 
-demo: ## Work the board; approve on Telegram, or ASK=terminal to approve here. FRESH=1 starts over
-	uv run --quiet --env-file .env python -m workforce.mission $(if $(FRESH),--fresh) $(if $(ASK),--ask $(ASK))
+demo: ## Work the board; approve on Telegram, or ASK=terminal here. FRESH=1 starts over, STACK=1 uses make stack
+	$(if $(STACK),$(STACK_ENV)) uv run --quiet --env-file .env python -m workforce.mission $(if $(FRESH),--fresh) $(if $(ASK),--ask $(ASK))
 
 board: ## Serve Mission Control on http://127.0.0.1:8080
 	uv run --quiet python -m workforce.mission --serve
+
+stack: ## Start Keycloak, OpenFGA and Langfuse; Langfuse is on http://127.0.0.1:8270 (billing@acme.example)
+	docker compose up -d --wait
+
+stack-check: stack ## The deploy promise against the running stack: real tokens, real checks, a real trace
+	$(STACK_ENV) uv run --quiet pytest -m stack

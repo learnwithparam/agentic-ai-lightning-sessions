@@ -7,3 +7,4 @@ One folder per free Lightning session; `sessions.toml` is the index.
   session's slug built. A session not built has no folder. The script enforces both ways.
 - Slugs and titles are Maven's; never rename one here without renaming it on Maven.
 - Descriptions and READMEs open with the job: the company, the truth outside the model, the metric.
+- CI (`.github/workflows/check.yml`) runs `make check` and `make -C mission-control stack-check` on every push.

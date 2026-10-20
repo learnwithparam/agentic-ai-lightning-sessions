@@ -29,6 +29,29 @@ to the engineering analyst, which searches GitHub, Linear and the docs. It reach
 answer cites a source the analyst read in that run (`mission.answer`). Cost per outcome is every run's cost divided by
 the cards in Done.
 
+## Deploy it: Keycloak, OpenFGA, Langfuse
+
+The deploy workshop runs the same board behind three services from `compose.yaml`:
+
+- **Keycloak** signs each AI employee in as itself, acting for one person. The person signs in once.
+  Each employee exchanges that token for its own, and Keycloak's introspection names both the employee
+  and the person. The board trusts that answer, never what a model says about itself.
+- **OpenFGA** decides every tool call and every approval from `deploy/policy.json`. The support
+  resolver works the billing desk and the analyst works engineering. sam, a contractor, is staff on
+  engineering only. Approving a refund needs a billing approver who is also billing staff, so sam's tap
+  is refused even though sam is listed as an approver.
+- **Langfuse** keeps every run. Each model call carries its tokens and cost, and each tool and handoff
+  is recorded. The card id is the session, so every run on one card reads as one thread.
+
+```
+make stack                                   # Langfuse: http://127.0.0.1:8270, billing@acme.example / acme-local
+STACK=1 ASK=terminal FRESH=1 make demo       # signs in as param; MISSION_USER=sam to watch billing refuse
+make stack-check                             # the promise as a test, against the running stack
+```
+
+With the stack on, the approver's name (the terminal user, or the Telegram username) must be an
+OpenFGA user who can approve. Without `STACK=1` the board runs exactly as in the Lightning session.
+
 ## Built in earlier sessions
 
 **A Slack AI agent with memory.** Tag the engineering analyst in a Slack thread. It searches GitHub,
@@ -56,5 +79,7 @@ make ask Q="why are customers charged twice?" AS=U_CONTRACTOR
 - `web/`: the board's styles and font.
 - `workforce/sources.py`, `workforce/analyst.py`, `workforce/slack_app.py`: the readers, the analyst
   and its citation check, and the Slack handler.
+- `workforce/access.py`, `workforce/traces.py`, `compose.yaml`, `deploy/`: the deploy step, Keycloak
+  and OpenFGA in front of every tool, and the Langfuse exporter.
 - `tests/`: one acceptance test per built step, and `test_steps.py`, which fails when a built step
   has none.
