@@ -17,7 +17,7 @@ no cost.
 make check     # lint and the acceptance tests: real guardrails and hiring system, a scripted model
 make demo      # the screener works both cards with a real model (key from ../mission-control/.env)
 make naive     # the same cards with both guardrails off, for comparison
-make board     # the board from the last make demo on http://127.0.0.1:8090
+make board     # the board from the last make demo on http://127.0.0.1:8091
 ```
 
 ## Two guardrails, two locks

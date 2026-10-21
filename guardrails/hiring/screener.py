@@ -218,7 +218,7 @@ def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--naive", action="store_true", help="both guardrails off, in its own state")
     p.add_argument("--serve", action="store_true", help="serve the board from the last run")
-    p.add_argument("--port", type=int, default=8090)
+    p.add_argument("--port", type=int, default=8091)
     a = p.parse_args()
     state = STATE.with_name(".hiring-naive") if a.naive else STATE
     if a.serve:

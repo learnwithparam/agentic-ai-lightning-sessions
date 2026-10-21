@@ -21,5 +21,5 @@ demo: ## The screener shortlists both cards with its guardrails on, with a real 
 naive: ## The same cards with both guardrails off, for comparison
 	$(RUN) $(KEYS) python -m hiring.screener --naive
 
-board: ## Serve the board from the last make demo on http://127.0.0.1:8090
+board: ## Serve the board from the last make demo on http://127.0.0.1:8091
 	$(RUN) python -m hiring.screener --serve
