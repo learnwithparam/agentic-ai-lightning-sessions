@@ -6,10 +6,11 @@ MCP gateway, which lists only that employee's tools and logs every call, refused
 reaches Done only when the travel system holds a ticket that lands in time and Priya and the client were
 both sent its flight number.
 
-**Before:** one agent holds every tool. It books the fastest seat, a £690 business fare over the £400
-cap, approves its own fare, and the card says Done because the agent said so. **After:** that same agent
-is refused by the travel system when it approves, and its card waits in Needs you for Priya's manager. The
-crew's card closes with an economy ticket that lands at 11:55 and two people told.
+**Before:** one agent holds every tool, fare approval included. Only its judgment stands between Priya
+and a £690 business seat it approves itself, over the £400 cap. **After:** each employee holds only its
+own tools, and the travel system refuses any AI approver. When the solo agent does book that seat and
+approve it (`tests/test_crew.py` makes it), the approval is refused and the card waits in Needs you for
+Priya's manager. The crew's card closes with an economy ticket that lands at 11:55 and two people told.
 
 ```
 make check     # lint and the acceptance tests: real gateways and travel system, a scripted model
