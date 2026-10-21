@@ -8,6 +8,7 @@ can run offline.
 | --- | --- | --- |
 | [Build a Mission Control for AI Agents](https://www.learnwithparam.com/labs/build-an-ai-mission-control-app) | AI employees work Acme's GitHub issues. A reply to a customer waits for a human. A card closes only when GitHub shows the reply. | [`mission-control/`](mission-control/) |
 | Build a Multi-Agent System with MCP | A trip planner, a booker and a messenger rebook a cancelled flight, each through an MCP gateway that lists only its tools. The card closes only when the travel system holds a ticket that lands in time and both contacts were told. | [`multi-agent-mcp/`](multi-agent-mcp/) |
+| Secure AI Agents with Guardrails | A screener shortlists payroll applicants, and one CV hides an instruction in white text. A guardrail withholds that CV from the model and holds the card for a recruiter; a request that screens by age stops before the model is called. | [`guardrails/`](guardrails/) |
 
 Later sessions are listed in [`sessions.toml`](sessions.toml) and get a folder here once they are built.
 

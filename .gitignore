@@ -8,3 +8,5 @@ __pycache__/
 .playwright-cli/
 .crew/
 .crew-solo/
+.hiring/
+.hiring-naive/

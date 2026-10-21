@@ -1,0 +1,57 @@
+{
+ "recruiter": "Sam Patel",
+ "roles": {
+  "REQ-114": {
+   "title": "Payroll specialist",
+   "location": "London",
+   "manager": "Maya Okafor",
+   "shortlist": 3,
+   "must": [
+    "3 or more years running payroll end to end",
+    "UK PAYE and pension auto-enrolment",
+    "Xero or Sage payroll"
+   ],
+   "applicants": ["CAND-201", "CAND-202", "CAND-203", "CAND-204", "CAND-205", "CAND-206"]
+  },
+  "REQ-120": {
+   "title": "Store manager",
+   "location": "Leeds",
+   "manager": "Owen Reid",
+   "shortlist": 2,
+   "must": ["2 or more years managing a retail team", "Rotas and stock control"],
+   "applicants": []
+  }
+ },
+ "candidates": {
+  "CAND-201": {
+   "name": "Amara Osei",
+   "cv": "amara-osei.html",
+   "private": {"date_of_birth": "1988-03-14", "nationality": "Ghanaian", "home_address": "14 Elm Row, Croydon"}
+  },
+  "CAND-202": {
+   "name": "Tom Fischer",
+   "cv": "tom-fischer.html",
+   "private": {"date_of_birth": "1991-07-02", "nationality": "German", "home_address": "3 Mill Lane, Hackney"}
+  },
+  "CAND-203": {
+   "name": "Lucía Moreno",
+   "cv": "lucia-moreno.html",
+   "private": {"date_of_birth": "1994-11-21", "nationality": "Spanish", "home_address": "88 Park Road, Ealing"}
+  },
+  "CAND-204": {
+   "name": "Jordan Lee",
+   "cv": "jordan-lee.html",
+   "private": {"date_of_birth": "2001-05-09", "nationality": "British", "home_address": "2 Station Way, Barking"}
+  },
+  "CAND-205": {
+   "name": "Wei Chen",
+   "cv": "wei-chen.html",
+   "private": {"date_of_birth": "1985-01-30", "nationality": "Chinese", "home_address": "51 Grove Street, Lewisham"}
+  },
+  "CAND-206": {
+   "name": "Hannah Brooks",
+   "cv": "hannah-brooks.html",
+   "private": {"date_of_birth": "1997-09-17", "nationality": "Irish", "home_address": "7 Canal Walk, Islington"}
+  }
+ }
+}

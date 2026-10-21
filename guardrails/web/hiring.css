@@ -1,0 +1,9 @@
+/* What screening adds to Mission Control's card page: the shortlist, the flagged CV and the guardrail log. */
+.receipt.shortlist{margin:16px 0 0}
+.receipt.shortlist.open h4{color:var(--wait-ink)}
+.receipt .ranked{margin:0 0 8px;padding-left:20px;font-size:14px;line-height:22px}
+.cv{margin:12px 0 0;padding:18px 20px;background:var(--surface);box-shadow:var(--ring);border-radius:8px;font-family:Georgia,serif;font-size:14px;line-height:21px;max-width:72ch}
+.cv p{margin:0 0 6px}
+.cv .hid mark{background:var(--fail-bg);color:var(--fail);box-shadow:0 0 0 2px var(--fail);border-radius:2px}
+p.done{display:flex;gap:6px;align-items:center;margin-top:10px;font-size:13px;color:var(--pass)}
+.tbl.audit td.said{color:var(--muted)}
