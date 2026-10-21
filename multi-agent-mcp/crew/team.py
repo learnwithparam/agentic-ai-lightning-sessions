@@ -156,7 +156,8 @@ async def work(board: Board, card: Card, model: Model | str | None = None, alone
             usage, ok, said = (run.context_wrapper.usage if run else Usage()), False, f"run failed: {e}"
         except APIError as e:
             usage, ok, said = steps.usage, False, f"run failed: {type(e).__name__}"
-    card.employee = SOLO if alone else f"{PLANNER}, {BOOKER} and {MESSENGER}"
+    # A comma list, so the team page credits each employee on the crew with the card's outcome.
+    card.employee = ", ".join(names)
     refused = [
         f"Gateway refused {c['agent']}: {c['said'].removeprefix('Refused: ')}"
         for c in calls(state, card.id)

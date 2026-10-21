@@ -293,7 +293,8 @@ def team(board: Board, roster: tuple[Role, ...]) -> str:
     """Every AI employee: what it is hired for, what it must never do, and what its outcomes cost."""
     rows = ""
     for r in roster:
-        mine = [c for c in board.cards if c.employee == r.name]
+        # A crew card names every employee who worked it, and each is credited with its outcome.
+        mine = [c for c in board.cards if r.name in c.employee.split(", ")]
         done = sum(c.column == "Done" for c in mine)
         spent = sum(c.cost for c in mine)
         rows += (

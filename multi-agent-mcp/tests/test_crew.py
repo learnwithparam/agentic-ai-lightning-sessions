@@ -11,9 +11,9 @@ from agents.testing import ScriptedModel, assistant_message, function_call
 
 from crew.board import card_page
 from crew.gateway import AGENTS, BOOKER, MESSENGER, PLANNER, SCOPES, SOLO, Gateway, calls
-from crew.team import SEED, settle, work
+from crew.team import SEED, TEAM, settle, work
 from crew.travel import Refused, Travel
-from workforce.board import Board
+from workforce.board import Board, team
 
 TOKENS = Usage(requests=1, input_tokens=2000, output_tokens=200, total_tokens=2200)
 
@@ -84,6 +84,8 @@ def test_the_card_is_done_only_when_a_ticket_lands_in_time_and_both_contacts_wer
     page = card_page(board.path.parent, card.id)
     assert "Ticketed" in page and "EW461, economy" in page and "Klaus Bergmann, Priya Shah" in page
     assert page.count('<tr class="no">') == 1
+    # The team page credits each of the three employees with the one Done card.
+    assert team(board, TEAM).count("<b>1</b> done of 1") == 3
     # Every model call across the three employees counts toward the card's one cost.
     assert card.runs[0].cost == pytest.approx(len(model.calls) * (2000 + 200 * 10) / 1_000_000)
 
