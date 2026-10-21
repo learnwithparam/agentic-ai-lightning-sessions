@@ -99,6 +99,7 @@ def crew(servers: dict[str, MCPServerStdio], model: Model | str) -> Agent:
         "messenger.",
         handoff_description="Books one flight from the planner's options.",
         handoffs=[messenger],
+        reset_tool_choice=False,
     )
     return agent(
         PLANNER,
@@ -108,6 +109,8 @@ def crew(servers: dict[str, MCPServerStdio], model: Model | str) -> Agent:
         "flight with a seat that lands at least 90 minutes before the meeting, and inside the fare cap if "
         "one does. Hand the card to the booker with your pick and one fallback.",
         handoffs=[booker],
+        # The planner and the booker pass the card on, so their last move is a hand-off, never a reply.
+        reset_tool_choice=False,
     )
 
 
