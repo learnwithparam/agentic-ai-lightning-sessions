@@ -7,6 +7,7 @@ can run offline.
 | Session | What you build | Code |
 | --- | --- | --- |
 | [Build a Mission Control for AI Agents](https://www.learnwithparam.com/labs/build-an-ai-mission-control-app) | AI employees work Acme's GitHub issues. A reply to a customer waits for a human. A card closes only when GitHub shows the reply. | [`mission-control/`](mission-control/) |
+| Build a Multi-Agent System with MCP | A trip planner, a booker and a messenger rebook a cancelled flight, each through an MCP gateway that lists only its tools. The card closes only when the travel system holds a ticket that lands in time and both contacts were told. | [`multi-agent-mcp/`](multi-agent-mcp/) |
 
 Later sessions are listed in [`sessions.toml`](sessions.toml) and get a folder here once they are built.
 

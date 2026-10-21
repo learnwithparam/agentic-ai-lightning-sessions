@@ -6,3 +6,5 @@ __pycache__/
 .pytest_cache/
 .mission/
 .playwright-cli/
+.crew/
+.crew-solo/

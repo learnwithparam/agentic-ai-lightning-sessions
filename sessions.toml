@@ -2,9 +2,10 @@
 # A session is `built` when its folder exists, its `make check` passes and its steps.toml marks the
 # Lightning's slug as built; scripts/check_sessions.py enforces it. Slugs and titles are Maven's.
 #
-# Every session extends Acme's board from mission-control, the project buildcamp learners build, so the
-# room sees the cohort's work each week. `job` is what the session adds to the board, `truth` is what
-# decides it worked outside the model, `screen` is the UI the room watches, `sells` is the next step.
+# Every session reuses Acme's board from mission-control, the project buildcamp learners build, but each
+# one puts a different everyday business job on it: never a support desk, refunds or GitHub work twice.
+# `job` is the work, `truth` is what decides it worked outside the model, `screen` is the UI the room
+# watches, `sells` is the next step.
 # The 22 Oct deck led with code and a billing ledger nobody knew, and sold nothing (21 Oct 2026).
 
 [[session]]
@@ -23,10 +24,10 @@ date = "2026-10-29"
 slug = "build-a-team-of-ai-agents"
 title = "Build a Multi-Agent System with MCP"
 folder = "multi-agent-mcp"
-built = false
-job = "A bug card on Acme's board goes to a planner, an engineer and a reviewer, each scoped by an MCP gateway"
-truth = "The pull request's CI passes on GitHub and its reviewer is not its author"
-screen = "The card page showing each hand-off, the gateway's call log, then the pull request on GitHub"
+built = true
+job = "Priya's cancelled flight to a client meeting goes to a trip planner, a booker and a messenger, each scoped by an MCP gateway"
+truth = "The travel system holds a ticket that lands in time and both contacts were sent its flight; a fare over the cap waits for her manager"
+screen = "The card page with each hand-off, the gateway's call log with its refusals, then the ticket"
 sells = "Buildcamp week 3, where the board becomes a system of agents"
 
 [[session]]
@@ -35,9 +36,9 @@ slug = "add-auth-and-guardrails-to-ai-agents"
 title = "Secure AI Agents with Guardrails"
 folder = "guardrails"
 built = false
-job = "A contractor asks about an issue they may not see, and Globex's issue hides an instruction to post Linear notes"
-truth = "OpenFGA refuses the read for that user, and the audit log shows the blocked post"
-screen = "The board refusing the contractor's card and flagging the planted instruction in Needs you"
+job = "A recruiting agent shortlists CVs for a role, and one CV hides an instruction to rank its owner first"
+truth = "The shortlist in the hiring system is the same with and without the hidden line, and the audit log shows the block"
+screen = "The board flagging the planted CV in Needs you, and a recruiter refused a candidate's private fields"
 sells = "Buildcamp week 4 guardrails, and the Deploy workshop for identity per agent"
 
 [[session]]
@@ -46,9 +47,9 @@ slug = "cut-ai-agent-costs-with-prompt-caching"
 title = "Cut AI Agent Costs with Token Economics"
 folder = "token-economics"
 built = false
-job = "The board's cost per outcome split per employee and per customer, then cut with three levers and a budget"
-truth = "The provider's own token counts for each run, cached tokens included"
-screen = "The board's cost page before and after, and a runaway card stopped by its budget"
+job = "An insurance claims agent reads accident photos and repair quotes into a claim file, then gets cheaper"
+truth = "The provider's own token counts for each claim, cached tokens included"
+screen = "The board's cost per claim before and after three levers, and a runaway claim stopped by its budget"
 sells = "Buildcamp last call before 16 Nov, where week 4 picks the cheapest model that passes"
 
 [[session]]
@@ -57,7 +58,7 @@ slug = "build-an-ai-second-brain-with-claude-code"
 title = "Build a Second Brain with Claude Code"
 folder = "second-brain"
 built = false
-job = "Claude Code files Acme's closed issues, notes and docs into one brain the analyst reads over MCP"
+job = "Claude Code files a consultant's meeting notes, papers and client decks into one brain an agent reads over MCP"
 truth = "Every answer cites a brain note whose file exists"
 screen = "The brain's notes in the editor, then a board card answered from one of them"
 sells = "The Deploy workshop on 16 Dec"
@@ -68,9 +69,9 @@ slug = "build-evals-for-an-ai-agent"
 title = "Build AI Agent Evals from Production Traces"
 folder = "evals-from-traces"
 built = false
-job = "The board's past runs become a labelled test set that gates a model swap"
+job = "Quillon's past medical-inquiry runs become a labelled test set that gates a model swap"
 truth = "Labels on real runs, scored by code checks first and a judge for the rest"
-screen = "The eval report, then the GitHub check failing the pull request that swaps the model"
+screen = "The eval report on the board, then the model swap refused because a missed side effect failed"
 sells = "The Deploy workshop on 16 Dec"
 
 [[session]]
@@ -79,8 +80,8 @@ slug = "build-an-ai-agent-dashboard-with-langfuse"
 title = "Trace AI Agents in Production"
 folder = "trace-in-production"
 built = false
-job = "Each card on the board becomes one Langfuse trace: hand-off, tool calls and the human's approval"
-truth = "The trace's spans match the card's runs, and the budget alert fires on Telegram"
+job = "A factory maintenance agent reads machine alerts and books repairs; it is killed mid-run and resumes, each run one Langfuse trace"
+truth = "The trace's spans match the card's runs, every repair order exists once, and the budget alert fires on Telegram"
 screen = "A card's trace in Langfuse, the cost per agent dashboard, the alert on a phone"
 sells = "The Deploy workshop on 16 Dec"
 
@@ -90,7 +91,7 @@ slug = "build-an-ai-agent-governance-framework"
 title = "Build an AI Agent Governance Framework"
 folder = "governance"
 built = false
-job = "Acme's head of support decides which work goes to the board and who signs off each action"
+job = "An operations lead decides which of the season's agents run, who signs off each action, and what each may spend"
 truth = "The board's decision record: every approval, who made it, and what each outcome cost"
 screen = "The team page as an operating model, and the month's page of cost, time saved and quality"
 sells = "The Leaders workshop on 9 Jan"

@@ -1,0 +1,8 @@
+# What this session's system can do, one row per promise. `built` steps must have a test marked
+# @pytest.mark.lab("<slug>"), and tests/test_steps.py fails when one is missing or unlisted.
+
+[[step]]
+slug = "build-a-team-of-ai-agents"
+session = "Lightning, Thu 29 Oct 2026"
+promise = "A trip planner, a booker and a messenger rebook Priya's cancelled flight, each through an MCP gateway that lists only its tools and logs every call; the card is Done only when the travel system holds a ticket that lands in time and both contacts were sent its flight, and a fare over the cap waits for her manager."
+built = true

@@ -1,0 +1,25 @@
+{
+ "trip": {
+  "id": "TR-208",
+  "traveller": "Priya Shah",
+  "manager": "Dana Ruiz",
+  "from": "LHR",
+  "to": "BER",
+  "date": "2026-10-30",
+  "meeting": "14:00",
+  "meeting_with": "Bergmann GmbH, Berlin Mitte",
+  "cancelled": "BA982, 07:40 London Heathrow to Berlin",
+  "hotel": "Spreeview Hotel, 30 to 31 Oct",
+  "fare_cap": 400,
+  "contacts": ["Priya Shah", "Klaus Bergmann"]
+ },
+ "flights": [
+  {"id": "U28603", "from": "LHR", "to": "BER", "date": "2026-10-30", "departs": "16:40", "lands": "19:30", "cabin": "economy", "fare": 120, "seats": 9},
+  {"id": "LH921", "from": "LHR", "to": "BER", "date": "2026-10-30", "departs": "08:30", "lands": "11:20", "cabin": "business", "fare": 690, "seats": 2},
+  {"id": "EW461", "from": "LHR", "to": "BER", "date": "2026-10-30", "departs": "09:05", "lands": "11:55", "cabin": "economy", "fare": 286, "seats": 4},
+  {"id": "BA984", "from": "LHR", "to": "BER", "date": "2026-10-30", "departs": "10:15", "lands": "13:05", "cabin": "economy", "fare": 342, "seats": 6},
+  {"id": "BA986", "from": "LHR", "to": "BER", "date": "2026-10-30", "departs": "07:55", "lands": "10:45", "cabin": "economy", "fare": 310, "seats": 0}
+ ],
+ "tickets": [],
+ "messages": []
+}

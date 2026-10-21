@@ -1,0 +1,5 @@
+/* What a crew adds to Mission Control's card page: the ticket and the gateway's calls. */
+.receipt.trip{margin:16px 0 0}
+.receipt.trip.open h4{color:var(--wait-ink)}
+.tbl.calls tr.no td{background:var(--fail-bg)}
+.tbl.calls td.args{color:var(--muted);max-width:28ch;overflow-wrap:anywhere}
