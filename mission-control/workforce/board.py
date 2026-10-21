@@ -339,6 +339,9 @@ def app(state: Path, roster: tuple[Role, ...]) -> web.Application:
         board = Board.open(state / "board.json")
         if not any(c.id == card_id and c.pending for c in board.cards):
             raise web.HTTPConflict(text="nothing is waiting on this card")
+        if req.headers.get("Origin") != f"{req.scheme}://{req.host}":
+            # Any page open in the same browser can post to 127.0.0.1; only the board's own form counts.
+            raise web.HTTPForbidden(text="approve from the board itself")
         form = await req.post()
         f = state / "decisions" / f"{card_id}.json"
         f.parent.mkdir(parents=True, exist_ok=True)

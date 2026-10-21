@@ -9,9 +9,10 @@ from dataclasses import replace
 import pytest
 from agents import Usage
 from agents.testing import ScriptedModel, assistant_message, function_call
+from aiohttp.test_utils import TestClient, TestServer
 
-from workforce.board import Board, detail, render, team
-from workforce.issues import Issues
+from workforce.board import Board, app, detail, render, team
+from workforce.issues import Issues, marker
 from workforce.mission import (
     QUESTION,
     SEED,
@@ -319,3 +320,49 @@ def test_a_host_that_fails_mid_run_fails_the_run_and_keeps_what_it_spent(desk):
 
     assert card.column == "Backlog" and card.runs[-1].ok is False
     assert card.log[-1] == "Backlog: run failed: APIConnectionError" and card.cost > 0
+
+
+def test_a_comment_anyone_could_write_with_the_cards_marker_does_not_close_it(desk, tmp_path):
+    board, card, issues = desk
+    asyncio.run(work(board, card, issues, support(), model=resolver_drafts()))
+    rows = json.loads((tmp_path / "github.json").read_text())
+    forged = {"author": "globex-dev", "body": f"fixed!\n\n{marker('C-1')}", "url": "x"}
+    next(r for r in rows if r["number"] == 412)["comments"].append(forged)
+    (tmp_path / "github.json").write_text(json.dumps(rows))
+
+    assert issues.replied(412, "C-1") is None
+
+
+def test_a_run_may_read_only_the_issue_on_its_card(desk):
+    board, card, issues = desk
+    model = ScriptedModel(
+        [
+            [function_call("transfer_to_support_resolver", {}, call_id="h1")],
+            [function_call("read_issue", {"number": 398}, call_id="r1")],
+            [assistant_message("Done.")],
+        ],
+        default_usage=TOKENS,
+    )
+
+    asyncio.run(work(board, card, issues, support(), model=model))
+
+    assert "GH#398 is not this card's issue." in str(model.calls[2].input)
+
+
+def test_the_approve_button_counts_only_a_post_from_the_board_itself(desk, tmp_path):
+    board, card, issues = desk
+    asyncio.run(work(board, card, issues, support(), model=resolver_drafts()))
+
+    async def post(origin):
+        async with TestClient(TestServer(app(tmp_path, TEAM))) as client:
+            res = await client.post(
+                "/cards/C-1/decide",
+                data={"yes": "1"},
+                headers={"Origin": origin(client)},
+                allow_redirects=False,
+            )
+            return res.status
+
+    assert asyncio.run(post(lambda c: "https://evil.example")) == 403
+    assert not (tmp_path / "decisions" / "C-1.json").exists()
+    assert asyncio.run(post(lambda c: str(c.make_url("")).rstrip("/"))) == 303

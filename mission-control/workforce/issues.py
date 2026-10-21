@@ -43,9 +43,9 @@ class Issues:
     def _rows(self) -> list[dict]:
         return json.loads(self.path.read_text())
 
-    def _api(self, path: str, body: dict | None = None) -> object:
+    def _api(self, path: str, body: dict | None = None, root: str = "") -> object:
         req = urllib.request.Request(  # noqa: S310 - fixed https host
-            f"https://api.github.com/repos/{self.repo}{path}",
+            f"https://api.github.com{root or f'/repos/{self.repo}'}{path}",
             data=json.dumps(body).encode() if body else None,
             headers={"Accept": "application/vnd.github+json", "Authorization": f"Bearer {self.token}"},
         )
@@ -75,9 +75,19 @@ class Issues:
             return [{"author": c["user"]["login"], "body": c["body"], "url": c["html_url"]} for c in rows]
         return self.issue(number)["comments"]
 
+    def me(self) -> str:
+        """Who the board posts as: the token's own login, or the fixture's support account."""
+        if not self.repo:
+            return AUTHOR
+        if not hasattr(self, "_me"):
+            self._me = self._api("", root="/user")["login"]
+        return self._me
+
     def replied(self, number: int, card_id: str) -> dict | None:
         """The comment this card posted, as GitHub has it, or None. Only this closes a reply card."""
-        return next((c for c in self.comments(number) if marker(card_id) in c["body"]), None)
+        # Anyone can paste the marker into a comment; only one written as the board counts.
+        mine = (c for c in self.comments(number) if c["author"] == self.me())
+        return next((c for c in mine if marker(card_id) in c["body"]), None)
 
     def reply(self, number: int, text: str, card_id: str, approved_by: str) -> dict:
         if found := self.replied(number, card_id):

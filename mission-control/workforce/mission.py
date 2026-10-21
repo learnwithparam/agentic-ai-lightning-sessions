@@ -127,6 +127,9 @@ def read_issue(ctx: ToolContext[Shift], number: int) -> str:
     shift = ctx.context
     if refused := shift.refused(ctx):
         return refused
+    if shift.card and number != shift.card.github:
+        # Issues carry their own readers; a run may open only the customer's issue on its card.
+        return f"GH#{number} is not this card's issue."
     try:
         i = shift.issues.issue(number)
     except KeyError:
