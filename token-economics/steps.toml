@@ -1,0 +1,8 @@
+# What this session's system can do, one row per promise. `built` steps must have a test marked
+# @pytest.mark.lab("<slug>"), and tests/test_steps.py fails when one is missing or unlisted.
+
+[[step]]
+slug = "cut-ai-agent-costs-with-prompt-caching"
+session = "Lightning, Thu 12 Nov 2026"
+promise = "A claims reader reads three insurance claims from photos and repair quotes; with the policy cached, photos at low detail and reasoning at low effort, every call starts with the same policy and asks to think less, the hail claim that its budget stopped before is filed, and each claim's cost is the claims system's ledger of the provider's own token counts, cached tokens at the cached price."
+built = true

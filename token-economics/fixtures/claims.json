@@ -1,0 +1,30 @@
+{
+ "adjuster": "Nina Kowalski",
+ "budget_usd": 0.003,
+ "claims": {
+  "CL-301": {
+   "holder": "Priya Shah",
+   "policy": "ACM-M-55120",
+   "vehicle": "Citroën C3, red, KX19 LMV",
+   "what_happened": "Skidded on a wet bend and hit a tree, front first. Nobody hurt.",
+   "documents": ["front-1.jpg", "front-2.jpg", "quote-301.pdf"]
+  },
+  "CL-302": {
+   "holder": "Tom Brennan",
+   "policy": "ACM-M-48807",
+   "vehicle": "White saloon, LB21 RWT",
+   "what_happened": "Stopped at lights and was hit from behind by another car.",
+   "documents": ["rear-1.jpg", "rear-2.jpg", "quote-302.pdf"]
+  },
+  "CL-303": {
+   "holder": "Northgate Car Hire",
+   "policy": "ACM-F-10342",
+   "vehicle": "Hire fleet at the Northgate depot",
+   "what_happened": "A hailstorm hit the depot overnight. The depot manager sent photos of the damaged cars.",
+   "documents": [
+    "hail-1.jpg", "hail-2.jpg", "hail-3.jpg", "hail-5.jpg", "hail-8.jpg",
+    "hail-9.jpg", "hail-10.jpg", "hail-12.jpg"
+   ]
+  }
+ }
+}

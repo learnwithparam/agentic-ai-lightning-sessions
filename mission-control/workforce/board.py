@@ -22,10 +22,16 @@ COLUMNS = ("Backlog", "Needs you", "In flight", "Done")
 
 
 def price(usage: Usage) -> float:
-    """USD for one run, from the per-million-token prices in WORKFORCE_PRICE_IN and WORKFORCE_PRICE_OUT."""
+    """USD for one run, from the per-million-token prices in WORKFORCE_PRICE_IN and WORKFORCE_PRICE_OUT.
+
+    Input the provider served from its cache is billed at WORKFORCE_PRICE_CACHED, the input price if unset.
+    """
     per_in = float(os.environ.get("WORKFORCE_PRICE_IN") or 0)
     per_out = float(os.environ.get("WORKFORCE_PRICE_OUT") or 0)
-    return (usage.input_tokens * per_in + usage.output_tokens * per_out) / 1_000_000
+    per_cached = float(os.environ.get("WORKFORCE_PRICE_CACHED") or per_in)
+    cached = usage.input_tokens_details.cached_tokens or 0
+    fresh = usage.input_tokens - cached
+    return (fresh * per_in + cached * per_cached + usage.output_tokens * per_out) / 1_000_000
 
 
 @dataclass(frozen=True)

@@ -1,0 +1,12 @@
+front-1.jpg: "Crashed Citroën C3.jpg" by Tommi Nummelin, CC BY-SA 3.0, https://commons.wikimedia.org/wiki/File:Crashed_Citro%C3%ABn_C3.jpg
+front-2.jpg: "Crashed Citroën C3 (2).jpg" by Tommi Nummelin, CC BY-SA 3.0, https://commons.wikimedia.org/wiki/File:Crashed_Citro%C3%ABn_C3_(2).jpg
+rear-1.jpg: "Moscow, Smolenskaya Square, rear-end collision, June 2026 06.jpg" by Retired electrician, CC0, https://commons.wikimedia.org/wiki/File:Moscow,_Smolenskaya_Square,_rear-end_collision,_June_2026_06.jpg
+rear-2.jpg: "Moscow, Smolenskaya Square, rear-end collision, June 2026 07.jpg" by Retired electrician, CC0, https://commons.wikimedia.org/wiki/File:Moscow,_Smolenskaya_Square,_rear-end_collision,_June_2026_07.jpg
+hail-1.jpg: "Hail damage car.jpg" by Simiprof, CC0, https://commons.wikimedia.org/wiki/File:Hail_damage_car.jpg
+hail-2.jpg: "Damaged car from hail in Missouri, April 2001.jpg" by Uncredited for US National Weather Service, Public domain, https://commons.wikimedia.org/wiki/File:Damaged_car_from_hail_in_Missouri,_April_2001.jpg
+hail-3.jpg: "FEMA - 44376 - truck windshield with hail damage in OK.jpg" by Win Henderson, Public domain, https://commons.wikimedia.org/wiki/File:FEMA_-_44376_-_truck_windshield_with_hail_damage_in_OK.jpg
+hail-5.jpg: "Grad wybita tylna szyba samochodu.jpg" by Ludek, CC BY-SA 4.0, https://commons.wikimedia.org/wiki/File:Grad_wybita_tylna_szyba_samochodu.jpg
+hail-8.jpg: "Perth hailstorm 2010 damaged car.jpg" by FCB Excalibur, CC BY-SA 2.0, https://commons.wikimedia.org/wiki/File:Perth_hailstorm_2010_damaged_car.jpg
+hail-9.jpg: "Some cars are not designed to survive a summer in Queensland due to hail.jpg" by Chris Olszewski, CC BY-SA 4.0, https://commons.wikimedia.org/wiki/File:Some_cars_are_not_designed_to_survive_a_summer_in_Queensland_due_to_hail.jpg
+hail-10.jpg: "StetaNaVozilu01 Pozega2021.jpg" by Nikola, CC BY-SA 4.0, https://commons.wikimedia.org/wiki/File:StetaNaVozilu01_Pozega2021.jpg
+hail-12.jpg: "Sydney hailstorms, car and sidewalk.jpg" by The original uploader was Dysprosia at English Wikinews., BSD, https://commons.wikimedia.org/wiki/File:Sydney_hailstorms,_car_and_sidewalk.jpg

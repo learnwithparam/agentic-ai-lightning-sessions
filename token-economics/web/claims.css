@@ -1,0 +1,9 @@
+/* What cost adds to Mission Control: the ladder of passes on the board, the filed claim and its ledger. */
+.tbl.ladder{margin-bottom:28px}
+.tbl.ladder tr.here td{background:var(--panel)}
+.tbl.ladder td.lead{font-weight:600}
+.tbl .off{display:inline-block;margin-right:6px;padding:1px 7px;border-radius:999px;font-size:12px;background:var(--wait-bg);color:var(--wait-ink)}
+.tbl td.n,.tbl th.n{text-align:right;font-variant-numeric:tabular-nums}
+.receipt.filed{margin:16px 0 0}
+.tbl.ledger tfoot td{font-weight:600;border-top:1px solid var(--line)}
+.tbl.ledger tr.stop td{background:var(--wait-bg);color:var(--wait-ink)}
