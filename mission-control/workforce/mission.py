@@ -187,6 +187,9 @@ def resolver(model: Model | str | None) -> Agent[Shift]:
         ),
         tools=[read_issue, search_linear, search_docs, request_reply],
         model=model,
+        # Handed a card, a small model may answer with its own name and draft nothing; its first move
+        # must be a tool.
+        model_settings=ModelSettings(tool_choice="required"),
     )
 
 

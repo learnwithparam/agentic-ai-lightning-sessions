@@ -21,6 +21,7 @@ from workforce.mission import (
     ask_human,
     decide,
     for_customer,
+    manager,
     on_board,
     work,
 )
@@ -366,3 +367,17 @@ def test_the_approve_button_counts_only_a_post_from_the_board_itself(desk, tmp_p
     assert asyncio.run(post(lambda c: "http://evil.example:8080", host="evil.example:8080")) == 403
     assert not (tmp_path / "decisions" / "C-1.json").exists()
     assert asyncio.run(post(lambda c: str(c.make_url("")).rstrip("/"))) == 303
+
+
+def test_every_employee_the_manager_hands_to_must_act_before_it_answers():
+    # A small model handed a card answered with its own name and drafted nothing (21 Oct 2026).
+    for employee in manager("scripted").handoffs:
+        assert employee.model_settings.tool_choice == "required", employee.name
+
+
+def test_one_hung_call_fails_the_run_in_a_minute(monkeypatch):
+    from workforce import default_model
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    client = default_model()._client
+    assert (client.timeout, client.max_retries) == (60, 0)

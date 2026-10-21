@@ -22,6 +22,7 @@ def default_model() -> Model | str:
         return name
     if not langfuse:
         set_tracing_disabled(True)
-    # A shared host can hang on a busy day; a minute fails the run rather than the board.
-    client = AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=key, timeout=60)
+    # A shared host can hang on a busy day; a minute fails the run rather than the board. The client's
+    # own retries would wait three minutes on one hung call, so the board retries the run instead.
+    client = AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=key, timeout=60, max_retries=0)
     return OpenAIChatCompletionsModel(model=name, openai_client=client)
