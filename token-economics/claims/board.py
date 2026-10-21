@@ -26,7 +26,7 @@ def ladder_html(state: Path, here: int) -> str:
         f"<td class=n>{p.filed} of {len(p.board.cards)}</td><td class=n>{p.fresh:,}</td>"
         f"<td class=n>{p.cached:,}</td><td class=n>{p.output:,}</td>"
         f'<td class="n lead">{"none filed" if p.per_claim is None else usd(p.per_claim)}</td>'
-        f"<td class=n>{'' if p.per_claim is None else usd(p.per_claim * 1000)}</td></tr>"
+        f"<td class=n>{p.per_thousand}</td></tr>"
         for p in passes(state)
     )
     return (

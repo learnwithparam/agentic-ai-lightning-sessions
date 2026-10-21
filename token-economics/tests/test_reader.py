@@ -189,3 +189,5 @@ def test_the_board_shows_each_pass_and_the_ledger_of_a_stopped_claim(tmp_path):
     stopped = card_page(tmp_path, 1, "C-9")
     assert "Not read: one more read would cross the $0.0030 budget" in stopped
     assert stopped.count("<tr><td>hail-") == Claims.open(tmp_path / "pass-1").stopped("CL-303")["read"]
+    assert ladder[-1].per_thousand in page and ladder[-1].per_thousand.count(".") == 1
+    assert len(ladder[-1].per_thousand.split(".")[1]) == 2, "a thousand claims shows cents"

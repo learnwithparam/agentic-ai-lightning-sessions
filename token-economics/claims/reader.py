@@ -225,6 +225,11 @@ class Pass:
     def per_claim(self) -> float | None:
         return self.board.cost_per_outcome
 
+    @property
+    def per_thousand(self) -> str:
+        # A thousand claims is a budget line, so cents, not the ledger's fractions of a cent.
+        return "" if self.per_claim is None else f"${self.per_claim * 1000:,.2f}"
+
 
 def passes(state: Path = STATE) -> list[Pass]:
     out = []
@@ -246,8 +251,7 @@ def ladder(state: Path = STATE) -> None:
     print(paint(f"{'':<21} {'fresh in':>8} {'cached':>7} {'out':>6} {'per claim':>9} {'per 1,000':>9}", "1"))
     for p in passes(state):
         cost = "none" if p.per_claim is None else usd(p.per_claim)
-        per_k = "" if p.per_claim is None else usd(p.per_claim * 1000)
-        print(f"{p.name:<21} {p.fresh:>8,} {p.cached:>7,} {p.output:>6,} {cost:>9} {per_k:>9}")
+        print(f"{p.name:<21} {p.fresh:>8,} {p.cached:>7,} {p.output:>6,} {cost:>9} {p.per_thousand:>9}")
 
 
 def main() -> None:
