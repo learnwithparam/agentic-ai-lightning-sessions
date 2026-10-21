@@ -353,16 +353,16 @@ def test_the_approve_button_counts_only_a_post_from_the_board_itself(desk, tmp_p
     board, card, issues = desk
     asyncio.run(work(board, card, issues, support(), model=resolver_drafts()))
 
-    async def post(origin):
+    async def post(origin, host=None):
         async with TestClient(TestServer(app(tmp_path, TEAM))) as client:
+            headers = {"Origin": origin(client)} | ({"Host": host} if host else {})
             res = await client.post(
-                "/cards/C-1/decide",
-                data={"yes": "1"},
-                headers={"Origin": origin(client)},
-                allow_redirects=False,
+                "/cards/C-1/decide", data={"yes": "1"}, headers=headers, allow_redirects=False
             )
             return res.status
 
     assert asyncio.run(post(lambda c: "https://evil.example")) == 403
+    # A page that rebinds its own name to 127.0.0.1 sends a matching Host and Origin.
+    assert asyncio.run(post(lambda c: "http://evil.example:8080", host="evil.example:8080")) == 403
     assert not (tmp_path / "decisions" / "C-1.json").exists()
     assert asyncio.run(post(lambda c: str(c.make_url("")).rstrip("/"))) == 303
