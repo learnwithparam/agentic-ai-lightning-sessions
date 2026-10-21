@@ -1,6 +1,7 @@
 {
- "payments-retries": [
-  "engineering"
+ "exports": [
+  "engineering",
+  "support"
  ],
  "release-process": [
   "engineering",

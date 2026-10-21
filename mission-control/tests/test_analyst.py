@@ -16,9 +16,9 @@ THREAD = [
     {
         "ts": "1.0",
         "user": "U_PM",
-        "text": "Two customers say they were charged twice at checkout this morning.",
+        "text": "Globex says their weekly CSV export fails with a 504 since Monday.",
     },
-    {"ts": "2.0", "user": "U_ENG", "text": "Gateway had timeouts around 9:00."},
+    {"ts": "2.0", "user": "U_ENG", "text": "Their workspace has 61,000 tasks."},
     {"ts": "3.0", "user": "U_ENG", "text": "<@U_BOT> is this a known bug, and who is on it?"},
 ]
 
@@ -38,9 +38,9 @@ def searches_then(text):
     return ScriptedModel(
         [
             [
-                function_call("search_github", {"query": "checkout charged twice retry"}, call_id="c1"),
-                function_call("search_linear", {"query": "checkout retry double charge"}, call_id="c2"),
-                function_call("search_docs", {"query": "payment retries idempotency"}, call_id="c3"),
+                function_call("search_github", {"query": "csv export timeout 504"}, call_id="c1"),
+                function_call("search_linear", {"query": "csv export timeout"}, call_id="c2"),
+                function_call("search_docs", {"query": "large export workaround"}, call_id="c3"),
             ],
             [assistant_message(text)],
         ]
@@ -50,8 +50,8 @@ def searches_then(text):
 @pytest.mark.lab("build-a-slack-bot-that-remembers")
 def test_tagged_in_a_thread_it_answers_from_github_linear_and_docs_with_sources(tmp_path):
     model = searches_then(
-        "Known bug [GH#412]: a retry makes a new idempotency key. The Payments squad is fixing it in "
-        "[PAY-88], and the rule is in [doc:payments-retries]. Also see [GH#999]."
+        "Known bug [GH#412]: the export runs past the load balancer's 30 seconds. The Data squad is moving "
+        "it to a background job in [EXP-41], and the workaround is in [doc:exports]. Also see [GH#999]."
     )
     slack = FakeSlack(THREAD)
     event = {"channel": "C1", "ts": "3.0", "thread_ts": "1.0", "user": "U_ENG", "text": THREAD[2]["text"]}
@@ -62,13 +62,13 @@ def test_tagged_in_a_thread_it_answers_from_github_linear_and_docs_with_sources(
 
     # It read the thread it was tagged in, not just the mention.
     first_input = str(model.calls[0].input)
-    assert "charged twice at checkout" in first_input and "timeouts around 9:00" in first_input
+    assert "fails with a 504" in first_input and "61,000 tasks" in first_input
     # It replied in that thread, linking each source it read and cited.
     assert slack.posted == [{"channel": "C1", "thread_ts": "1.0", "text": text}]
     for sid, url in [
-        ("GH#412", "https://github.com/acme/shop/issues/412"),
-        ("PAY-88", "https://linear.app/acme/issue/PAY-88"),
-        ("doc:payments-retries", "payments-retries.md"),
+        ("GH#412", "https://github.com/acme/app/issues/412"),
+        ("EXP-41", "https://linear.app/acme/issue/EXP-41"),
+        ("doc:exports", "exports.md"),
     ]:
         assert sid in text and url in text
     # A citation no tool returned never reaches Slack.
@@ -77,38 +77,38 @@ def test_tagged_in_a_thread_it_answers_from_github_linear_and_docs_with_sources(
 
 def test_a_follow_up_in_the_same_thread_remembers_the_first_answer():
     session = SQLiteSession("C1:1.0")
-    first = searches_then("It is [GH#412], fixed in [PAY-88].")
+    first = searches_then("It is [GH#412], fixed in [EXP-41].")
     asyncio.run(
-        answer("Is the double charge known?", readers=Readers("acme", "U_ENG"), session=session, model=first)
+        answer("Is the export timeout known?", readers=Readers("acme", "U_ENG"), session=session, model=first)
     )
 
-    second = ScriptedModel([[assistant_message("The Payments squad owns [PAY-88].")]])
+    second = ScriptedModel([[assistant_message("The Data squad owns [EXP-41].")]])
     reply = asyncio.run(
         answer("Who owns the fix?", readers=Readers("acme", "U_ENG"), session=session, model=second)
     )
 
-    assert "It is [GH#412], fixed in [PAY-88]." in str(second.calls[0].input)
-    # Memory carries the conversation, not trust: PAY-88 was not read in this run, so it is not cited.
-    assert reply.sources == [] and reply.dropped == ["PAY-88"]
+    assert "It is [GH#412], fixed in [EXP-41]." in str(second.calls[0].input)
+    # Memory carries the conversation, not trust: EXP-41 was not read in this run, so it is not cited.
+    assert reply.sources == [] and reply.dropped == ["EXP-41"]
 
 
 def test_citations_are_kept_only_for_sources_read_in_this_run():
-    read = {"PAY-88": Source("PAY-88", "linear", "t", "x", "u")}
-    r = check_citations("Fixed in [PAY-88] and [MADE-UP].", read)
-    assert [s.id for s in r.sources] == ["PAY-88"] and r.dropped == ["MADE-UP"]
-    assert r.text == "Fixed in [PAY-88] and."
+    read = {"EXP-41": Source("EXP-41", "linear", "t", "x", "u")}
+    r = check_citations("Fixed in [EXP-41] and [MADE-UP].", read)
+    assert [s.id for s in r.sources] == ["EXP-41"] and r.dropped == ["MADE-UP"]
+    assert r.text == "Fixed in [EXP-41] and."
 
 
 def test_a_read_source_counts_with_a_typographic_hyphen_or_without_brackets():
     read = {
-        "doc:payments-retries": Source("doc:payments-retries", "docs", "t", "x", "u"),
+        "doc:release-process": Source("doc:release-process", "docs", "t", "x", "u"),
         "GH#412": Source("GH#412", "github", "t", "x", "u"),
     }
-    r = check_citations("See [doc:payments\u2011retries], tracked as (GH#412), not [GH\u2011999].", read)
-    assert [s.id for s in r.sources] == ["doc:payments-retries", "GH#412"] and r.dropped == ["GH-999"]
+    r = check_citations("See [doc:release\u2011process], tracked as (GH#412), not [GH\u2011999].", read)
+    assert [s.id for s in r.sources] == ["doc:release-process", "GH#412"] and r.dropped == ["GH-999"]
     assert check_citations("Nothing found for GH#4120.", read).sources == []
 
 
 def test_search_never_returns_a_row_that_matches_no_term():
     assert rank(fixture_github("acme"), "kubernetes helm chart", ENG) == []
-    assert [s.id for s in rank(fixture_github("acme"), "checkout retry charges", ENG)][0] == "GH#412"
+    assert [s.id for s in rank(fixture_github("acme"), "csv export timeout", ENG)][0] == "GH#412"

@@ -1,4 +1,4 @@
-"""AI employees for Acme's billing: the analyst, the manager and the support resolver."""
+"""AI employees for Acme's support and engineering: the manager, the support resolver and the analyst."""
 
 import os
 
@@ -22,5 +22,6 @@ def default_model() -> Model | str:
         return name
     if not langfuse:
         set_tracing_disabled(True)
-    client = AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=key)
+    # A shared host can hang on a busy day; a minute fails the run rather than the board.
+    client = AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=key, timeout=60)
     return OpenAIChatCompletionsModel(model=name, openai_client=client)

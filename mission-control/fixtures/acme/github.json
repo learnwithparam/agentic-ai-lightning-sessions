@@ -1,43 +1,50 @@
 [
  {
   "number": 412,
-  "title": "Checkout retry charges the card twice after a gateway timeout",
+  "title": "CSV export times out on workspaces over 50,000 tasks",
   "state": "open",
-  "body": "When the payment gateway times out, the client retries and the second attempt creates a new charge. Seen 14 times this week.",
-  "url": "https://github.com/acme/shop/issues/412",
+  "author": "globex-ops",
+  "body": "Since Monday our weekly CSV export fails with a 504 after 30 seconds. Our workspace has 61,000 tasks and our finance team needs this file every Friday.",
+  "url": "https://github.com/acme/app/issues/412",
   "labels": [
    "bug",
-   "payments"
+   "customer"
   ],
   "access": [
-   "engineering"
-  ]
+   "engineering",
+   "support"
+  ],
+  "comments": []
  },
  {
   "number": 398,
-  "title": "Add idempotency key header to payment client",
+  "title": "Stream CSV rows instead of building the export file in memory",
   "state": "closed",
-  "body": "Merged in #401. The client sends Idempotency-Key, but the retry path builds a new key each time.",
-  "url": "https://github.com/acme/shop/issues/398",
+  "author": "dana-data",
+  "body": "Merged in #401. Memory use is fine now, but a large export still runs inside one web request, so it hits the load balancer's 30 second limit.",
+  "url": "https://github.com/acme/app/issues/398",
   "labels": [
-   "payments"
+   "exports"
   ],
   "access": [
    "engineering"
-  ]
+  ],
+  "comments": []
  },
  {
   "number": 377,
-  "title": "Dark mode for the order history page",
+  "title": "Dark mode for the task list",
   "state": "open",
+  "author": "lee-web",
   "body": "Design is ready in Figma.",
-  "url": "https://github.com/acme/shop/issues/377",
+  "url": "https://github.com/acme/app/issues/377",
   "labels": [
    "frontend"
   ],
   "access": [
    "engineering",
    "contractors"
-  ]
+  ],
+  "comments": []
  }
 ]

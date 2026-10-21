@@ -1,8 +1,9 @@
 """Mission Control's board: every card, the column it is in, and what each run on it cost.
 
 Cost per outcome is every run's cost, failed runs included, divided by the cards in Done. A card reaches
-Done only through mission.settle, which asks the system of record, so the number counts outcomes and
-not runs the agent called finished.
+Done only through mission.settle or mission.answer, which ask the system of record, so the number counts
+outcomes and not runs the agent called finished. The board is also where a human approves: a card in
+Needs you shows the draft, what it rests on, and Approve and Decline buttons when approval was asked here.
 """
 
 from __future__ import annotations
@@ -17,8 +18,6 @@ from pathlib import Path
 from agents import Usage
 from aiohttp import web
 
-from workforce.ledger import Ledger
-
 COLUMNS = ("Backlog", "Needs you", "In flight", "Done")
 
 
@@ -29,6 +28,17 @@ def price(usage: Usage) -> float:
     return (usage.input_tokens * per_in + usage.output_tokens * per_out) / 1_000_000
 
 
+@dataclass(frozen=True)
+class Role:
+    """One AI employee: the outcome it is hired for, the metric that watches it, what it must never do."""
+
+    name: str
+    outcome: str
+    metric: str
+    never: str
+    tools: tuple[str, ...]
+
+
 @dataclass
 class Run:
     employee: str
@@ -37,6 +47,8 @@ class Run:
     cost: float
     ok: bool
     note: str
+    steps: list[str] = field(default_factory=list)
+    read: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -56,6 +68,12 @@ class Card:
     @property
     def cost(self) -> float:
         return sum(r.cost for r in self.runs)
+
+    @property
+    def github(self) -> int | None:
+        """The customer's GitHub issue number, from a link like GH#412."""
+        m = re.search(r"GH#(\d+)", self.issue)
+        return int(m.group(1)) if m else None
 
 
 @dataclass
@@ -97,6 +115,8 @@ MARK = (
     '<rect x="6" y="3" width="4" height="9" rx="1" fill="#f8d749"/><rect x="11" y="3" width="4" height="11" '
     'rx="1" fill="#171717"/><rect x="16" y="3" width="3" height="6" rx="1" fill="#1f7a45"/></svg>'
 )
+CHECK = '<svg class="ck" viewBox="0 0 16 16"><path d="M3 8.5 6.5 12 13 4.5"/></svg>'
+E = html.escape
 
 
 def usd(x: float) -> str:
@@ -108,70 +128,102 @@ def plain(text: str) -> str:
     return re.sub(r"\*\*|__|^#+\s*|^\s*[-*]\s+", "", text, flags=re.M)
 
 
+def chips(ids: list[str], tone: str = "grey") -> str:
+    return "".join(f'<span class="chip {tone}">{E(s)}</span>' for s in ids)
+
+
 def answered(c: Card) -> str:
     """What closed a question card: the answer, and only the sources the analyst read in that run."""
-    refs = "".join(f'<span class="chip grey">{html.escape(s)}</span>' for s in c.sources)
     return (
-        '<div class="receipt"><h4><svg class="ck" viewBox="0 0 16 16"><path d="M3 8.5 6.5 12 13 4.5"/></svg>'
-        f"Answered from sources it read</h4><p>{html.escape(plain(c.answer)[:400])}</p>"
-        f'<div class="refs">{refs}</div></div>'
+        f'<div class="receipt"><h4>{CHECK}Answered from sources it read</h4>'
+        f'<p>{E(plain(c.answer)[:400])}</p><div class="refs">{chips(c.sources)}</div></div>'
     )
 
 
-def receipt(c: Card, ledger: Ledger) -> str:
-    """The ledger rows that closed the card: what was kept and what was refunded, and who approved it."""
-    refunded = {r["charge"]: r for r in ledger.refunds}
-    mine = [x for x in ledger.charges if x["customer"] == c.customer and x["id"] in refunded]
-    rows = []
-    for ch in mine:
-        kept = [x for x in ledger.charges if x["order"] == ch["order"] and x["id"] not in refunded]
-        rows += [("Order", ch["order"])]
-        rows += [("Kept", f"{k['id']} {k['amount'] / 100:.2f}") for k in kept]
-        rows += [
-            ("Refunded", f"{ch['id']} {ch['amount'] / 100:.2f}"),
-            ("Approved by", refunded[ch["id"]]["approved_by"]),
-        ]
-    cells = "".join(f"<dt>{html.escape(k)}</dt><dd>{html.escape(v)}</dd>" for k, v in rows)
+def receipt(c: Card, comment: dict) -> str:
+    """The comment GitHub has on the customer's issue, read back from GitHub, and who approved it."""
+    body = re.sub(r"\s*<!--.*?-->", "", comment["body"]).strip()
+    rows = [("Issue", f"GH#{c.github}"), ("Posted as", comment["author"])]
+    rows += [("Approved by", comment["approved_by"])] if comment.get("approved_by") else []
+    cells = "".join(f"<dt>{E(k)}</dt><dd>{E(v)}</dd>" for k, v in rows)
     return (
-        '<div class="receipt"><h4><svg class="ck" viewBox="0 0 16 16"><path d="M3 8.5 6.5 12 13 4.5"/></svg>'
-        f"Ledger: one charge per order</h4><dl>{cells}</dl></div>"
+        f'<div class="receipt"><h4>{CHECK}GitHub shows the reply</h4><p>{E(body[:400])}</p>'
+        f"<dl>{cells}</dl></div>"
     )
 
 
-def card_html(c: Card, ledger: Ledger | None) -> str:
-    refs = "".join(f'<span class="chip grey">{html.escape(r)}</span>' for r in c.issue.split(", "))
+def ask(c: Card, full: bool) -> str:
+    p = c.pending
+    asked = {"board": "here", "telegram": "on Telegram", "terminal": "in the terminal"}
+    where = asked.get(p.get("asked"), "")
+    text = p["body"] if full else p["body"][:160] + ("..." if len(p["body"]) > 160 else "")
+    out = (
+        f'<div class="ask"><b>Post this reply on GH#{p["issue"]}?</b><span>{E(text)}</span>'
+        f'<div class="refs">Rests on {chips(p["rests_on"], "wait")}</div>'
+        f"<em>Drafted by {E(p['maker'])}{', waiting ' + where if where else ''}.</em>"
+    )
+    if p.get("asked") == "board":
+        out += (
+            f'<form method="post" action="/cards/{E(c.id)}/decide" class="decide">'
+            '<button class="btn dark" name="yes" value="1">Approve and post</button>'
+            '<button class="btn" name="yes" value="0">Decline</button></form>'
+        )
+    return out + "</div>"
+
+
+def card_html(c: Card, replied: dict | None) -> str:
     gate = [line.removeprefix("Gate: ") for line in c.log if line.startswith("Gate: ")]
     last = next((line.split(": ", 1)[-1] for line in reversed(c.log) if not line.startswith("Gate: ")), "")
     body = (
-        f'<article class="card tc"><h3>{html.escape(c.title)}</h3><div class="refs">{refs}</div>'
-        f'<div class="who"><span><b>{html.escape(c.employee or "Unassigned")}</b></span>'
+        f'<article class="card tc"><h3><a href="/cards/{E(c.id)}">{E(c.title)}</a></h3>'
+        f'<div class="refs">{chips(c.issue.split(", "))}</div>'
+        f'<div class="who"><span><b>{E(c.employee or "Unassigned")}</b></span>'
         f'<span class="cost">{len(c.runs)} {"run" if len(c.runs) == 1 else "runs"}, '
         f"{usd(c.cost)}</span></div>"
     )
     if c.pending:
-        body += (
-            f'<div class="ask"><b>Approve refund of {html.escape(c.pending["charge"])}?</b>'
-            f"<span>{html.escape(c.pending['reason'])}. Requested by {html.escape(c.pending['maker'])}, "
-            "sent to Telegram.</span></div>"
-        )
+        body += ask(c, full=False)
     elif last:
-        body += f'<p class="last">{html.escape(last[:1].upper() + last[1:])}</p>'
+        body += f'<p class="last">{E(last[:1].upper() + last[1:])}</p>'
     # On a Done card the refusal is history, so it reads quiet instead of as a live failure.
     tone = "block past" if c.column == "Done" else "block"
-    body += "".join(f'<p class="{tone}">Gate refused: {html.escape(g)}</p>' for g in gate[-1:])
+    body += "".join(f'<p class="{tone}">Gate refused: {E(g)}</p>' for g in gate[-1:])
     body += "</article>"
     if c.column == "Done" and c.sources:
         body += answered(c)
-    elif c.column == "Done" and ledger is not None:
-        body += receipt(c, ledger)
+    elif c.column == "Done" and replied:
+        body += receipt(c, replied)
     return body
 
 
-def render(board: Board, ledger: Ledger | None = None) -> str:
+def page(title: str, live: str, here: str) -> str:
+    links = "".join(
+        f'<a href="{href}"{" aria-current=page" if name == here else ""}>{name}</a>'
+        for name, href in (("Board", "/"), ("Team", "/team"), ("Activity", "/#activity"))
+    )
+    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>{E(title)}</title>
+<link rel="stylesheet" href="/static/base.css"><link rel="stylesheet" href="/static/board.css"></head><body>
+<nav class="top"><a class="brand" href="/">{MARK}Mission Control</a>{links}<span class="grow"></span>
+<span class="tenant">Workspace <b>Acme</b></span></nav>
+<div id="live">{live}</div>
+<script>setInterval(async()=>{{try{{const t=await (await fetch(location.pathname)).text();
+const n=new DOMParser().parseFromString(t,"text/html").getElementById("live");
+const o=document.getElementById("live");
+// Swapping an unchanged page, or the buttons under the pointer, eats the click on Approve.
+if(n&&n.innerHTML!==o.innerHTML&&!document.querySelector(".decide:hover"))o.replaceWith(n)}}catch(e){{}}}},2000)
+</script></body></html>"""
+
+
+Replies = dict[str, dict]
+
+
+def render(board: Board, replies: Replies | None = None) -> str:
+    replies = replies or {}
     lanes = ""
     for name in COLUMNS:
         cards = [c for c in board.cards if c.column == name]
-        inner = "".join(card_html(c, ledger) for c in cards) or '<p class="none">Nothing here</p>'
+        inner = "".join(card_html(c, replies.get(c.id)) for c in cards) or '<p class="none">Nothing here</p>'
         lanes += (
             f'<section class="lane {LANE[name]}" aria-label="{name}"><h2><i></i>{name}'
             f"<small>{len(cards)}</small></h2>{inner}</section>"
@@ -180,22 +232,16 @@ def render(board: Board, ledger: Ledger | None = None) -> str:
     failed = sum(not r.ok for _, r in runs)
     log = (
         "".join(
-            f"<tr><td>{html.escape(c.title)}</td><td>{html.escape(r.employee)}</td>"
+            f'<tr><td><a href="/cards/{E(c.id)}">{E(c.title)}</a></td><td>{E(r.employee)}</td>'
             f'<td class="n hide">{r.input_tokens:,}</td><td class="n hide">{r.output_tokens:,}</td>'
             f'<td class="n">{usd(r.cost)}</td><td>{"Finished" if r.ok else "Failed"}</td>'
-            f'<td class="said hide">{html.escape(r.note[:140])}</td></tr>'
+            f'<td class="said hide">{E(r.note[:140])}</td></tr>'
             for c, r in reversed(runs)
         )
         or '<tr><td colspan="7">No runs yet. Run make demo to work the backlog.</td></tr>'
     )
     cpo, done = board.cost_per_outcome, sum(c.column == "Done" for c in board.cards)
-    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"><title>Mission Control</title>
-<link rel="stylesheet" href="/static/base.css"><link rel="stylesheet" href="/static/board.css"></head><body>
-<nav class="top"><span class="brand">{MARK}Mission Control</span><a href="#board">Board</a>
-<a href="#activity">Activity</a><span class="grow"></span>
-<span class="tenant">Workspace <b>Acme</b></span></nav>
-<div id="live"><div class="wrap tight" id="board"><div class="head"><div><h1 class="page">Board</h1>
+    live = f"""<div class="wrap tight" id="board"><div class="head"><div><h1 class="page">Board</h1>
 <p>Each card is done only when the system of record agrees. Anything that cannot be undone waits for you.</p>
 </div><div class="stats"><div class="stat lead"><span>Cost per outcome</span>
 <b>{"None yet" if cpo is None else usd(cpo)}</b><em>failed runs included</em></div>
@@ -206,20 +252,117 @@ def render(board: Board, ledger: Ledger | None = None) -> str:
 <h2 class="sec" id="activity">Activity</h2><p class="sub">Every run on the board and what it cost.</p>
 <table class="tbl"><thead><tr><th>Card</th><th>Employee</th><th class="n hide">Tokens in</th>
 <th class="n hide">Tokens out</th><th class="n">Cost</th><th>Result</th><th class="hide">Said</th>
-</tr></thead>
-<tbody>{log}</tbody></table></div></div>
-<script>setInterval(async()=>{{try{{const t=await (await fetch(location.pathname)).text();
-const n=new DOMParser().parseFromString(t,"text/html").getElementById("live");
-if(n)document.getElementById("live").replaceWith(n)}}catch(e){{}}}},2000)</script></body></html>"""
+</tr></thead><tbody>{log}</tbody></table></div>"""
+    return page("Mission Control", live, "Board")
 
 
-def serve(state: Path, port: int = 8080) -> None:
-    async def page(_: web.Request) -> web.Response:
-        ledger = Ledger.open(state / "ledger.json")
-        return web.Response(text=render(Board.open(state / "board.json"), ledger), content_type="text/html")
+def detail(c: Card, replied: dict | None) -> str:
+    """One card: where it stands, every run with its steps and cost, and what closed it."""
+    runs = (
+        "".join(
+            f'<li class="card run"><div class="who"><b>{E(r.employee)}</b><span class="cost">'
+            f"{r.input_tokens:,} in, {r.output_tokens:,} out, {usd(r.cost)}, "
+            f"{'finished' if r.ok else 'failed'}</span></div>"
+            f'<ol class="steps">{"".join(f"<li>{E(s)}</li>" for s in r.steps)}</ol>'
+            f"{'<div class=refs>Read ' + chips(r.read) + '</div>' if r.read else ''}"
+            f'<p class="last">{E(plain(r.note)[:300])}</p></li>'
+            for r in c.runs
+        )
+        or '<li class="none">No runs yet.</li>'
+    )
+    timeline = "".join(f"<li>{E(line)}</li>" for line in c.log) or '<li class="none">Not started.</li>'
+    closed = ""
+    if c.pending:
+        closed = ask(c, full=True)
+    elif c.column == "Done" and c.sources:
+        closed = answered(c)
+    elif c.column == "Done" and replied:
+        closed = receipt(c, replied)
+    live = f"""<div class="wrap tight detail"><p class="eyebrow">{E(c.id)} &middot; {E(c.column)}</p>
+<h1 class="page">{E(c.title)}</h1><div class="refs">{chips(c.issue.split(", "))}
+{chips([c.customer], "blue") if c.customer else ""}</div>
+<div class="stats"><div class="stat"><span>Employee</span><b>{E(c.employee or "Unassigned")}</b></div>
+<div class="stat"><span>Runs</span><b>{len(c.runs)}</b></div>
+<div class="stat"><span>Cost</span><b>{usd(c.cost)}</b><em>failed runs included</em></div></div>
+{closed}<h2 class="sec">Runs</h2><ol class="runs">{runs}</ol>
+<h2 class="sec">Timeline</h2><ol class="timeline">{timeline}</ol></div>"""
+    return page(c.title, live, "")
 
-    app = web.Application()
-    app.router.add_get("/", page)
-    app.router.add_static("/static", WEB)
-    app.router.add_static("/fonts", WEB / "fonts")
-    web.run_app(app, host="127.0.0.1", port=port)
+
+def team(board: Board, roster: tuple[Role, ...]) -> str:
+    """Every AI employee: what it is hired for, what it must never do, and what its outcomes cost."""
+    rows = ""
+    for r in roster:
+        mine = [c for c in board.cards if c.employee == r.name]
+        done = sum(c.column == "Done" for c in mine)
+        spent = sum(c.cost for c in mine)
+        rows += (
+            f'<article class="card role"><h3>{E(r.name)}</h3><dl>'
+            f"<dt>Hired for</dt><dd>{E(r.outcome)}</dd><dt>Watched by</dt><dd>{E(r.metric)}</dd>"
+            f'<dt>Must never</dt><dd class="never">{E(r.never)}</dd></dl>'
+            f'<div class="refs">{chips(list(r.tools))}</div><div class="who">'
+            f"<span><b>{done}</b> done of {len(mine)}</span>"
+            f'<span class="cost">{usd(spent / done) + " per outcome" if done else "no outcome yet"}</span>'
+            "</div></article>"
+        )
+    live = f"""<div class="wrap tight"><div class="head"><div><h1 class="page">Team</h1>
+<p>Each AI employee is hired for one outcome and has one thing it must never do. A test holds each line.</p>
+</div></div><div class="roster">{rows}</div></div>"""
+    return page("Team", live, "Team")
+
+
+def app(state: Path, roster: tuple[Role, ...]) -> web.Application:
+    from workforce.issues import Issues
+
+    def read() -> tuple[Board, Replies]:
+        board, issues = Board.open(state / "board.json"), Issues.open(state / "github.json")
+        replies = {c.id: found for c in board.cards if c.github and (found := issues.replied(c.github, c.id))}
+        return board, replies
+
+    async def index(_: web.Request) -> web.Response:
+        return web.Response(text=render(*read()), content_type="text/html")
+
+    async def one(req: web.Request) -> web.Response:
+        board, replies = read()
+        try:
+            c = board.card(req.match_info["id"])
+        except StopIteration:
+            raise web.HTTPNotFound() from None
+        return web.Response(text=detail(c, replies.get(c.id)), content_type="text/html")
+
+    async def roster_page(_: web.Request) -> web.Response:
+        return web.Response(text=team(read()[0], roster), content_type="text/html")
+
+    async def decide(req: web.Request) -> web.Response:
+        # The page only records the click; mission.on_board hands it to decide, which holds the rule.
+        card_id = req.match_info["id"]
+        board = Board.open(state / "board.json")
+        if not any(c.id == card_id and c.pending for c in board.cards):
+            raise web.HTTPConflict(text="nothing is waiting on this card")
+        form = await req.post()
+        f = state / "decisions" / f"{card_id}.json"
+        f.parent.mkdir(parents=True, exist_ok=True)
+        by = f"board:{os.environ.get('USER', 'human')}"
+        f.write_text(json.dumps({"by": by, "yes": form.get("yes") == "1"}))
+        raise web.HTTPSeeOther(f"/cards/{card_id}")
+
+    a = web.Application()
+    a.router.add_get("/", index)
+    a.router.add_get("/team", roster_page)
+    a.router.add_get("/cards/{id}", one)
+    a.router.add_post("/cards/{id}/decide", decide)
+    a.router.add_static("/static", WEB)
+    a.router.add_static("/fonts", WEB / "fonts")
+    return a
+
+
+async def start(state: Path, roster: tuple[Role, ...], port: int = 8080) -> web.AppRunner:
+    """Serve the board inside the running demo, so it moves while the employees work."""
+    runner = web.AppRunner(app(state, roster))
+    await runner.setup()
+    await web.TCPSite(runner, "127.0.0.1", port).start()
+    return runner
+
+
+def serve(state: Path, roster: tuple[Role, ...], port: int = 8080) -> None:
+    web.run_app(app(state, roster), host="127.0.0.1", port=port)

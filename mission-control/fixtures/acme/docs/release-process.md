@@ -1,4 +1,4 @@
 # Release process
 
-Releases go out on Tuesday and Thursday. A change to payments needs a second reviewer from the
-Payments squad and a passing contract test against the gateway sandbox.
+Releases go out on Tuesday and Thursday. A change to exports needs a review from the Data squad and a
+passing export test on a workspace with 100,000 tasks.

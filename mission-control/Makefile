@@ -15,19 +15,19 @@ check: ## Lint, format, and every step's acceptance test (no keys, no model spen
 	uv run --quiet ruff format --check .
 	uv run --quiet pytest
 
-ask: ## Ask one question as a user: make ask Q="is the double charge known?" AS=U_CONTRACTOR
+ask: ## Ask one question as a user: make ask Q="is the export timeout a known bug?" AS=U_CONTRACTOR
 	WORKFORCE_USER=$(or $(AS),U_ENG) uv run --quiet --env-file .env python -m workforce.cli "$(Q)"
 
 slack: ## Run the analyst in your Slack workspace over Socket Mode
 	uv run --quiet --env-file .env python -m workforce.slack_app
 
-demo: ## Work the board; approve on Telegram, or ASK=terminal here. FRESH=1 starts over, STACK=1 uses make stack
+demo: ## Work the board live on :8080; approve on Telegram, ASK=terminal or ASK=board. FRESH=1 starts over, STACK=1 uses make stack
 	$(if $(STACK),$(STACK_ENV)) uv run --quiet --env-file .env python -m workforce.mission $(if $(FRESH),--fresh) $(if $(ASK),--ask $(ASK))
 
 board: ## Serve Mission Control on http://127.0.0.1:8080
 	uv run --quiet python -m workforce.mission --serve
 
-stack: ## Start Keycloak, OpenFGA and Langfuse; Langfuse is on http://127.0.0.1:8270 (billing@acme.example)
+stack: ## Start Keycloak, OpenFGA and Langfuse; Langfuse is on http://127.0.0.1:8270 (support@acme.example)
 	docker compose up -d --wait
 
 stack-check: stack ## The deploy promise against the running stack: real tokens, real checks, a real trace

@@ -1,18 +1,19 @@
 [
  {
-  "identifier": "PAY-88",
-  "title": "Reuse the idempotency key across checkout retries",
+  "identifier": "EXP-41",
+  "title": "Move CSV export to a background job and email a download link",
   "state": "In Progress",
-  "assignee": "Payments squad",
-  "description": "Root cause of the double charges: the retry path generates a fresh key. Fix is to derive the key from the order id.",
-  "url": "https://linear.app/acme/issue/PAY-88",
+  "assignee": "Data squad",
+  "description": "Root cause of the export timeouts: the export runs inside one web request and the load balancer cuts it at 30 seconds. The background job ships in release 2.14.",
+  "url": "https://linear.app/acme/issue/EXP-41",
   "access": [
-   "engineering"
+   "engineering",
+   "support"
   ]
  },
  {
   "identifier": "WEB-210",
-  "title": "Order history dark mode",
+  "title": "Task list dark mode",
   "state": "Backlog",
   "assignee": "Web squad",
   "description": "Follow the new design tokens.",

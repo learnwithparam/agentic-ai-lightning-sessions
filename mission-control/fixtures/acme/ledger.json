@@ -1,9 +1,0 @@
-{
- "charges": [
-  {"id": "ch_3001", "customer": "cus_812", "order": "ORD-5531", "amount": 4900, "at": "2026-10-20T09:00:12Z"},
-  {"id": "ch_3002", "customer": "cus_812", "order": "ORD-5531", "amount": 4900, "at": "2026-10-20T09:00:41Z"},
-  {"id": "ch_3007", "customer": "cus_812", "order": "ORD-5498", "amount": 2900, "at": "2026-10-13T14:22:05Z"},
-  {"id": "ch_3010", "customer": "cus_907", "order": "ORD-5540", "amount": 12900, "at": "2026-10-20T09:02:30Z"}
- ],
- "refunds": []
-}

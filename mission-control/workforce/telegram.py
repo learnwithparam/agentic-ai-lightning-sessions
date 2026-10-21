@@ -2,7 +2,7 @@
 
 The answer is read by long-polling getUpdates, so the demo needs no public URL. Only a tap in
 TELEGRAM_CHAT_ID on this card's buttons counts. Who approved is the tapper's numeric Telegram id, which
-the ledger records: a username is whatever its owner types, so it cannot name an approver.
+the GitHub comment records: a username is whatever its owner types, so it cannot name an approver.
 """
 
 from __future__ import annotations
@@ -49,8 +49,8 @@ class Telegram:
             "sendMessage",
             {
                 "chat_id": self.chat_id,
-                "text": f"{card.title} ({card.issue})\nRefund {p['charge']}: {p['reason']}\n"
-                f"Requested by {p['maker']}.",
+                "text": f"{card.title}\nReply on GH#{p['issue']}, drafted by {p['maker']}:\n\n{p['body']}\n\n"
+                f"Rests on {', '.join(p['rests_on'])}.",
                 "reply_markup": {
                     "inline_keyboard": [
                         [

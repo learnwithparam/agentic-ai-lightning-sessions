@@ -72,7 +72,7 @@
     {
       "user": "user:param",
       "relation": "staff",
-      "object": "desk:billing"
+      "object": "desk:support"
     },
     {
       "user": "user:param",
@@ -82,7 +82,7 @@
     {
       "user": "user:param",
       "relation": "approver",
-      "object": "desk:billing"
+      "object": "desk:support"
     },
     {
       "user": "user:sam",
@@ -92,12 +92,12 @@
     {
       "user": "user:sam",
       "relation": "approver",
-      "object": "desk:billing"
+      "object": "desk:support"
     },
     {
       "user": "agent:support-resolver",
       "relation": "employee",
-      "object": "desk:billing"
+      "object": "desk:support"
     },
     {
       "user": "agent:engineering-analyst",
@@ -107,6 +107,7 @@
   ],
   "approvers": {
     "terminal:param": "param",
-    "terminal:sam": "sam"
+    "terminal:sam": "sam",
+    "board:param": "param"
   }
 }

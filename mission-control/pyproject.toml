@@ -1,7 +1,7 @@
 [project]
 name = "mission-control"
 version = "0.1.0"
-description = "AI employees that resolve customer billing issues: refunds wait for a human, and a card closes only when the payments ledger agrees"
+description = "AI employees that answer customers on GitHub from Linear and the docs: a reply waits for a human, and a card closes only when GitHub shows it"
 requires-python = ">=3.13"
 dependencies = [
     "aiohttp==3.14.4",

@@ -93,8 +93,8 @@ services:
       LANGFUSE_INIT_PROJECT_NAME: Mission Control
       LANGFUSE_INIT_PROJECT_PUBLIC_KEY: pk-lf-acme-local
       LANGFUSE_INIT_PROJECT_SECRET_KEY: sk-lf-acme-local
-      LANGFUSE_INIT_USER_EMAIL: billing@acme.example
-      LANGFUSE_INIT_USER_NAME: Acme billing
+      LANGFUSE_INIT_USER_EMAIL: support@acme.example
+      LANGFUSE_INIT_USER_NAME: Acme support
       LANGFUSE_INIT_USER_PASSWORD: acme-local
     healthcheck:
       test: wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/api/public/health || exit 1

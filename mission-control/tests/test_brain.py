@@ -10,19 +10,17 @@ from agents.testing import ScriptedModel, assistant_message, function_call
 from workforce.analyst import answer
 from workforce.sources import FIXTURES, Readers, docs, fixture_github, fixture_linear, people
 
-QUESTION = "Why are customers charged twice on checkout retry, and is there a fix planned?"
-CLAIM = (
-    "Known bug [GH#412], fix in [PAY-88], rule in [doc:payments-retries]. Releases: [doc:release-process]."
-)
+QUESTION = "Is the CSV export timeout a known bug, and is a fix planned?"
+CLAIM = "Known bug [GH#412], fix in [EXP-41], workaround in [doc:exports]. Releases: [doc:release-process]."
 
 
 def ask_as(user):
     model = ScriptedModel(
         [
             [
-                function_call("search_github", {"query": "checkout retry charged twice"}, call_id="g"),
-                function_call("search_linear", {"query": "checkout retry fix"}, call_id="l"),
-                function_call("search_docs", {"query": "payment retries release process"}, call_id="d"),
+                function_call("search_github", {"query": "csv export timeout"}, call_id="g"),
+                function_call("search_linear", {"query": "export timeout fix"}, call_id="l"),
+                function_call("search_docs", {"query": "large export release process"}, call_id="d"),
             ],
             [assistant_message(CLAIM)],
         ]
@@ -37,11 +35,11 @@ def test_the_same_question_as_engineer_and_contractor_is_answered_from_different
     eng, eng_saw = ask_as("U_ENG")
     con, con_saw = ask_as("U_CONTRACTOR")
 
-    assert [s.id for s in eng.sources] == ["GH#412", "PAY-88", "doc:payments-retries", "doc:release-process"]
+    assert [s.id for s in eng.sources] == ["GH#412", "EXP-41", "doc:exports", "doc:release-process"]
     assert [s.id for s in con.sources] == ["doc:release-process"]
-    assert con.dropped == ["GH#412", "PAY-88", "doc:payments-retries"]
+    assert con.dropped == ["GH#412", "EXP-41", "doc:exports"]
     # The restricted text never reached the model while it answered the contractor.
-    for secret in ["double charges", "Idempotency-Key", "new charge"]:
+    for secret in ["load balancer", "background job", "504"]:
         assert secret in eng_saw and secret not in con_saw
 
 

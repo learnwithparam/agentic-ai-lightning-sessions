@@ -21,7 +21,7 @@ INSTRUCTIONS = """Answer engineering questions from company tools.
 - Search GitHub, Linear and the docs before answering.
 - Search again with other words if a search finds nothing.
 - Do every search before you reply. Your reply is final, so never say you will search next.
-- Use only what the searches return. End each sentence with its source id in brackets, like [PAY-88].
+- Use only what the searches return. End each sentence with its source id in brackets, like [EXP-41].
 - If nothing relevant comes back, say what you searched and that you found nothing.
 - Keep it short, in plain sentences with no markdown: the answer first, then what to do next."""
 
@@ -86,7 +86,7 @@ class Reply:
 
 
 CITE = re.compile(r"\[([^\[\]]+)\]")
-# Models write ids with typographic hyphens (payments\u2011retries); those are the same id it read.
+# Models write ids with typographic hyphens (release\u2011process); those are the same id it read.
 DASHES = str.maketrans(dict.fromkeys("\u2010\u2011\u2012\u2013\u2014\u2212", "-"))
 
 

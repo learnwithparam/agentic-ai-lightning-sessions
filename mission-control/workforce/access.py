@@ -18,13 +18,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 POLICY = Path(__file__).resolve().parent.parent / "deploy" / "policy.json"
-# Which desk each guarded tool works on; a guarded tool missing here is refused, never let through.
+# Which desks each guarded tool works on; a guarded tool missing here is refused, never let through.
+# Linear and the docs serve both desks, so the resolver reads the planned fix the analyst would.
 DESKS = {
-    "find_charges": "billing",
-    "request_refund": "billing",
-    "search_github": "engineering",
-    "search_linear": "engineering",
-    "search_docs": "engineering",
+    "read_issue": ("support",),
+    "request_reply": ("support",),
+    "search_github": ("engineering",),
+    "search_linear": ("engineering", "support"),
+    "search_docs": ("engineering", "support"),
 }
 
 Check = Callable[[str, str, str], bool]
@@ -138,17 +139,19 @@ class Access:
 
     def refuse(self, agent: str, tool: str) -> str | None:
         """Why this employee may not run this tool for this person, or None when it may."""
-        desk = DESKS.get(tool)
-        if desk is None:
+        desks = DESKS.get(tool)
+        if desks is None:
             return f"{tool} is on no desk"
         b = self.badge(agent)
-        if not self.check(f"agent:{b.agent}", "employee", f"desk:{desk}"):
-            return f"{agent} does not work the {desk} desk"
-        if not self.check(f"user:{b.user}", "staff", f"desk:{desk}"):
+        worked = [d for d in desks if self.check(f"agent:{b.agent}", "employee", f"desk:{d}")]
+        if not worked:
+            return f"{agent} does not work the {' or '.join(desks)} desk"
+        if not any(self.check(f"user:{b.user}", "staff", f"desk:{d}") for d in worked):
+            desk = " or ".join(worked)
             return f"{b.user} has no access to the {desk} desk, so {agent} may not act there for them"
         return None
 
-    def may_approve(self, who: str, desk: str = "billing") -> bool:
+    def may_approve(self, who: str, desk: str = "support") -> bool:
         # A channel id (telegram:<numeric id>) is not a person until policy.json or MISSION_APPROVERS
         # names one, so a renamed Telegram account or an unknown tapper is refused.
         user = self.approvers.get(who)
