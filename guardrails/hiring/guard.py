@@ -2,7 +2,7 @@
 
 A CV parser reads every character in the file; a recruiter reads what the page shows. Text one sees and
 the other does not is the attack: the 2026 Duke study of 196,682 CVs found about 1% hiding prompts this
-way, most of them as white or tiny text. The scan compares the two readings, so it needs no model.
+way, as text invisible to a person. The scan compares the two readings, so it needs no model.
 """
 
 from __future__ import annotations
