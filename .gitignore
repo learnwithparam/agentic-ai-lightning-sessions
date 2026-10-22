@@ -11,3 +11,5 @@ __pycache__/
 .hiring/
 .hiring-naive/
 .claims/
+.brain/
+.board/
