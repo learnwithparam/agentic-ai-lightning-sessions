@@ -1,0 +1,61 @@
+# Halden Hotels' four hotels as the systems of record start the week: each night's price and floor,
+# what is booked, stock against par, the suppliers that sell each item, and the published rota.
+
+[hotels.OSL]
+name = "Halden Oslo"
+manager = "Nils Aas, hotel manager"
+[hotels.OSL.nights.2026-12-18]
+price = 149
+floor = 109
+booked = 62
+competitors = [139, 139, 155]
+[hotels.OSL.stock.king-sheet]
+item = "King sheets"
+on_hand = 80
+par = 200
+
+[hotels.BGO]
+name = "Halden Bergen"
+manager = "Kari Lunde, hotel manager"
+[hotels.BGO.nights.2026-12-19]
+price = 165
+floor = 99
+booked = 31
+competitors = [119, 129, 135]
+note = "The Nordic Fisheries conference on 19 Dec was cancelled; 140 room nights went with it."
+[hotels.BGO.stock.coffee]
+item = "Breakfast coffee, kg"
+on_hand = 15
+par = 75
+
+[hotels.TRD]
+name = "Halden Trondheim"
+manager = "Ola Vik, hotel manager"
+[hotels.TRD.stock.water]
+item = "Minibar water, bottles"
+on_hand = 100
+par = 500
+
+[hotels.SVG]
+name = "Halden Stavanger"
+manager = "Lars Eide, hotel manager"
+[[hotels.SVG.staff]]
+name = "Jonas Lie"
+hours = 24
+shifts = [["2026-12-23T07:00", "2026-12-23T15:00"]]
+[[hotels.SVG.staff]]
+name = "Aisha Noor"
+hours = 30
+shifts = [["2026-12-21T15:00", "2026-12-21T23:00"]]
+[[hotels.SVG.staff]]
+name = "Erik Moe"
+hours = 38
+shifts = [["2026-12-22T07:00", "2026-12-22T15:00"]]
+
+[suppliers.king-sheet]
+Nordlin = 4.20
+[suppliers.coffee]
+Kaffebrenneriet = 21.00
+[suppliers.water]
+QuickStock = 0.45
+Fjordvann = 0.60

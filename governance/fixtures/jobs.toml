@@ -1,0 +1,51 @@
+# The week's jobs on the board, each for one AI employee. The hotel, night, item or shift comes from
+# here into the tools by code, never from a tool argument, so an agent cannot act on a job it made up.
+
+[[job]]
+id = "J-01"
+agent = "rates"
+hotel = "OSL"
+night = "2026-12-18"
+says = "Two competitors dropped Friday to EUR 139"
+
+[[job]]
+id = "J-02"
+agent = "rates"
+hotel = "BGO"
+night = "2026-12-19"
+says = "A conference cancelled; Saturday is 31% booked"
+
+[[job]]
+id = "J-03"
+agent = "supplies"
+hotel = "OSL"
+item = "king-sheet"
+says = "King sheets are below par"
+
+[[job]]
+id = "J-04"
+agent = "supplies"
+hotel = "BGO"
+item = "coffee"
+says = "Breakfast coffee is below par"
+
+[[job]]
+id = "J-05"
+agent = "supplies"
+hotel = "TRD"
+item = "water"
+says = "Minibar water is below par"
+
+[[job]]
+id = "J-06"
+agent = "rota"
+hotel = "SVG"
+shift = ["2026-12-22T15:00", "2026-12-22T23:00"]
+out = "Sara Holm"
+says = "Sara Holm is off sick for Tuesday's late shift"
+
+[[job]]
+id = "J-07"
+agent = "linen"
+hotel = "OSL"
+says = "Forecast January's linen for Halden Oslo"

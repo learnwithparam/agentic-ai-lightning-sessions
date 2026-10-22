@@ -1,0 +1,8 @@
+/* What governance adds to Mission Control: the operating model, the decision record and the month. */
+.tbl.model,.tbl.month,.tbl.record{margin-bottom:28px}
+.tbl td.n,.tbl th.n{text-align:right;font-variant-numeric:tabular-nums}
+.status,.verdict-chip{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12.5px;font-weight:500}
+.status.running,.verdict-chip.allowed,.verdict-chip.signed{background:var(--pass-bg);color:var(--pass)}
+.status.paused,.verdict-chip.asked,.verdict-chip.declined,.verdict-chip.not-started{background:var(--wait-bg);color:var(--wait-ink)}
+.verdict-chip.refused{background:var(--fail-bg);color:var(--fail)}
+.tbl.record td:first-child{font-variant-numeric:tabular-nums;color:var(--muted)}

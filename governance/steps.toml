@@ -1,0 +1,8 @@
+# What this session's system can do, one row per promise. `built` steps must have a test marked
+# @pytest.mark.lab("<slug>"), and tests/test_steps.py fails when one is missing or unlisted.
+
+[[step]]
+slug = "build-an-ai-agent-governance-framework"
+session = "Lightning, Thu 17 Dec 2026"
+promise = "A hotel group's four AI employees work the week under one policy file the operations director owns: each write is allowed alone within its limit, waits for a named signer above it, or is refused by a rule the employee is told and can retry inside; a paused employee or one over its AI budget never starts; no AI employee can sign; nothing waiting is written until the signer says yes; every verdict is appended to a decision record that is never rewritten, every write in the systems of record has exactly one decision behind it, and the month page reads each employee's outcomes, AI spend against budget and time saved back from it."
+built = true
