@@ -18,14 +18,15 @@ make naive     # the same model, the same questions, no brain
 make board     # the board from the last make demo on http://127.0.0.1:8093
 ```
 
-## Two checks, two different files
+## Three checks, in the code
 
 | Check | Where | What it refuses |
 | --- | --- | --- |
 | Every note against its source | `Vault.check`, after `make file` | A note whose source is not in the inbox, a fact not in its source word for word, an inbox file with no note |
 | Every citation against the notes | `Vault.cite`, behind the `cite` tool | A note the brain does not hold, a quote that is not one of the note's facts |
+| Three searches per question | `search_notes`, in the brain's server | A fourth search, so a model that finds nothing must cite or say so |
 
-Together they mean an answer that cites the brain cites something Hannah captured, never something a
+The first two mean an answer that cites the brain cites something Hannah captured, never something a
 model wrote. The answer's own wording is the model's; the board shows each cited quote under it.
 
 ## How the card closes

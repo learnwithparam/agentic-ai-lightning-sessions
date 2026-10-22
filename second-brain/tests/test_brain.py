@@ -144,15 +144,16 @@ def test_the_filer_prints_each_tool_call_and_flags_any_model_it_was_not_pinned_t
     assert other_models({"modelUsage": {MODEL: {}, "claude-haiku-4-5": {}}}) == ["claude-haiku-4-5"]
 
 
-def test_a_second_search_tells_the_researcher_to_cite_or_say_the_brain_lacks_it(vault, board):
+def test_a_second_search_is_nudged_and_a_fourth_is_refused(vault, board):
+    queries = ["warehouse rota", "rota", "staff rota", "rota 2027"]
     again = ScriptedModel(
-        [
-            [function_call("search_notes", {"query": "warehouse rota"}, call_id="s1")],
-            [function_call("search_notes", {"query": "rota"}, call_id="s2")],
-            [assistant_message("The brain does not hold it.")],
-        ],
+        [[function_call("search_notes", {"query": q}, call_id=f"s{i}")] for i, q in enumerate(queries)]
+        + [[assistant_message("The brain does not hold it.")]],
         default_usage=TOKENS,
     )
     asyncio.run(work(board, board.cards[2], model=again, brain=vault.root))
-    first, second = (c["said"] for c in calls(board.path.parent, "C-3"))
-    assert first == "No note matches." and "searched already" in second
+    first, second, _, fourth = calls(board.path.parent, "C-3")
+    assert first["said"] == "No note matches." and "searched already" in second["said"]
+    assert not fourth["allowed"] and fourth["said"].startswith("Refused: 3 searches is the limit")
+    # A refused search is not a refused citation: the card still waits because nothing was cited.
+    assert board.card("C-3").log[-1] == "Needs you: no note in the brain answers it; Hannah Moreau answers"

@@ -55,7 +55,8 @@ SEED = (
 INSTRUCTIONS = (
     f"You answer questions on {OWNER}'s client work for Fernwood Grocers from her brain, and from nothing "
     "else. Search the brain once with search_notes. Cite every fact your answer uses with cite, copying the "
-    "fact exactly as the note quotes it. Then answer in two or three plain sentences. If no fact answers the "
+    "fact exactly as the note quotes it. Then answer in two or three plain sentences that say only what the "
+    "cited facts say, with no reason, consequence or number they do not state. If no fact answers the "
     "question, say the brain does not hold it and cite nothing."
 )
 

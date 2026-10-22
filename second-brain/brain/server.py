@@ -17,6 +17,8 @@ from mcp.server.mcpserver import MCPServer
 from brain.vault import Refused, Vault
 
 TOOLS = ("search_notes", "read_note", "cite")
+# A small model that finds nothing searches again and again; the brain stops it here, not in a prompt.
+SEARCHES = 3
 
 
 class BrainServer(MCPServer):
@@ -53,6 +55,10 @@ def tools(s: BrainServer) -> None:
     @s.tool()
     def search_notes(query: str) -> str:
         """Find the notes that match a few keywords. Returns each note's name, title and quoted facts."""
+        done = sum(c["tool"] == "search_notes" for c in calls(s.calls.parent, s.card))
+        if done >= SEARCHES:
+            said = f"Refused: {SEARCHES} searches is the limit. Cite what you found or say it is not held."
+            return s.log("search_notes", {"query": query}, False, said)
         hits = s.vault.search(query)
         said = (
             "\n\n".join(
@@ -60,8 +66,7 @@ def tools(s: BrainServer) -> None:
             )
             or "No note matches."
         )
-        # A small model that finds nothing searches again forever; tell it where it stands.
-        if any(c["tool"] == "search_notes" for c in calls(s.calls.parent, s.card)):
+        if done:
             said += "\n\nYou have searched already. Cite the facts that answer, or say the brain lacks it."
         return s.log("search_notes", {"query": query}, True, said)
 
