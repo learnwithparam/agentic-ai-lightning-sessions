@@ -56,7 +56,7 @@ def ask_html(card_id: str, w: dict) -> str:
         f'<div class="ask"><b>{E(w["agent"])} asks: {E(describe(w["action"]))}</b>'
         f"<span>{E(w['rule'])}.</span>"
         f'<div class="refs">Signs {chips([policy.first(w["signer"])], "wait")}</div>'
-        f"<em>Nothing is written until {E(w['signer'])} answers.</em>"
+        f"<em>Nothing is written until {E(policy.first(w['signer']))} answers.</em>"
         f'<form method="post" action="/cards/{E(card_id)}/decide" class="decide">'
         '<button class="btn dark" name="yes" value="1">Approve</button>'
         '<button class="btn" name="yes" value="0">Decline</button></form></div>'
