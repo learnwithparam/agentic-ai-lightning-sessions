@@ -38,7 +38,8 @@ def fit(text: str, width: int) -> str:
 
 
 def say(text: str, tone: str = "0") -> None:
-    print(paint(fit(text, WIDTH), tone))
+    # Flushed per line: a SIGKILL takes whatever is still buffered with it.
+    print(paint(fit(text, WIDTH), tone), flush=True)
 
 
 def seed(board: Board) -> None:

@@ -81,10 +81,15 @@ def read_sensor(ctx: RunContextWrapper[Shift], machine: str) -> str:
 @function_tool
 def attach_to_order(ctx: RunContextWrapper[Shift], order_id: str) -> str:
     """Join this alert to a repair order already open for the same fault."""
+    held = ctx.context.cmms.covering(ctx.context.alert["id"])
     try:
         order = ctx.context.cmms.attach(ctx.context.alert["id"], order_id.strip().upper())
     except Refused as e:
         return str(e)
+    if held and held.id == order.id:
+        # A resumed run finds its own order open on the machine: nothing new was joined.
+        ctx.context.did = f"already booked {order.id}"
+        return f"This alert is already on {order.id}; nothing changed."
     ctx.context.did = f"joined {order.id}"
     return f"Joined {order.id}."
 

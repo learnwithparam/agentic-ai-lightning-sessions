@@ -13,7 +13,7 @@ from pathlib import Path
 
 from workforce.board import Board, usd
 
-BUDGET = 0.004
+BUDGET = 0.001
 LEAD = "Ingrid Halvorsen"
 
 Send = Callable[[str], None]

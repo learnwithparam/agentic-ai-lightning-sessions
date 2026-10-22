@@ -157,9 +157,9 @@ def killed_shift(tmp_path, lf: FakeLangfuse | None, sent: list[str]) -> None:
         lf.alive = True
 
 
-def resumed(tmp_path, lf: FakeLangfuse | None, sent: list[str]) -> Board:
+def resumed(tmp_path, lf: FakeLangfuse | None, sent: list[str], plan: dict = PLAN) -> Board:
     get = lf.get if lf else None
-    return asyncio.run(run.shift(tmp_path, crew_model(), get=get, send=sent.append, wait=0))
+    return asyncio.run(run.shift(tmp_path, crew_model(plan), get=get, send=sent.append, wait=0))
 
 
 @pytest.mark.lab("build-an-ai-agent-dashboard-with-langfuse")
@@ -184,6 +184,16 @@ def test_a_killed_shift_resumes_and_every_repair_order_exists_once(tmp_path, tra
     assert {r.employee for r in killed} == {TRIAGE, PLANNER}
     assert all(r.input_tokens > 0 and r.cost > 0 for r in killed), "spend from its trace"
     assert a04.runs[-1].note == "already booked WO-2004"
+
+
+@pytest.mark.lab("build-an-ai-agent-dashboard-with-langfuse")
+def test_a_resumed_run_that_joins_its_own_order_changes_nothing(tmp_path, traced):
+    """What the live model did: on resume, triage saw WO-2004 open on the compressor and joined it."""
+    sent: list[str] = []
+    killed_shift(tmp_path, traced, sent)
+    done = resumed(tmp_path, traced, sent, PLAN | {"A-04": ("attach",)})
+    assert done.card("A-04").runs[-1].note == "already booked WO-2004"
+    assert Cmms.open(tmp_path / "cmms.json").orders["WO-2004"].alerts == ["A-04"]
 
 
 @pytest.mark.lab("build-an-ai-agent-dashboard-with-langfuse")
