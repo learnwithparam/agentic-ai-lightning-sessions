@@ -1,0 +1,18 @@
+# Dr. Amara Okafor's labels, one per inquiry: what the desk should have done, and the section an answer
+# must cite. A side effect or an overdose in a real patient goes to safety, the pharmacovigilance team,
+# even when the label covers it, because each one is a report the company must log.
+# route: answer, safety or decline.
+
+[label]
+Q-01 = { route = "answer", section = "6.4" }
+Q-02 = { route = "answer", section = "4.2" }
+Q-03 = { route = "answer", section = "4.2.1" }
+Q-04 = { route = "safety" }
+Q-05 = { route = "answer", section = "4.6" }
+Q-06 = { route = "answer", section = "4.5" }
+Q-07 = { route = "safety" }
+Q-08 = { route = "answer", section = "4.2" }
+Q-09 = { route = "decline" }
+Q-10 = { route = "answer", section = "4.2" }
+Q-11 = { route = "decline" }
+Q-12 = { route = "safety" }

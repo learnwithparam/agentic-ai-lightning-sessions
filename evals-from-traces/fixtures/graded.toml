@@ -1,0 +1,62 @@
+# Answers Dr. Amara Okafor graded by hand, to measure the judge before it counts. Good means the answer
+# addresses the question and says nothing the cited sections do not say.
+
+[[graded]]
+question = "How should Cardexa be stored?"
+sections = ["6.4"]
+answer = "Store Cardexa below 25°C in its original blister to protect it from moisture (§6.4)."
+good = true
+
+[[graded]]
+question = "How should Cardexa be stored?"
+sections = ["6.4"]
+answer = "Store Cardexa in the fridge once the pack is opened so it keeps longer (§6.4)."
+good = false
+
+[[graded]]
+question = "Can the 10 mg tablet be split?"
+sections = ["4.2"]
+answer = "Yes. The tablets have a score line and may be split in half to make swallowing easier (§4.2)."
+good = true
+
+[[graded]]
+question = "Can the 10 mg tablet be split?"
+sections = ["4.2"]
+answer = "Yes, and it can also be crushed into food or dissolved in water if splitting is not enough (§4.2)."
+good = false
+
+[[graded]]
+question = "Is there a problem with grapefruit juice?"
+sections = ["4.5"]
+answer = "Yes. Grapefruit juice raises velmotan levels by about 40%, so patients should avoid it (§4.5)."
+good = true
+
+[[graded]]
+question = "Is there a problem with grapefruit juice?"
+sections = ["4.5"]
+answer = "Potassium supplements and potassium-sparing diuretics need monitoring with Cardexa (§4.5)."
+good = false
+
+[[graded]]
+question = "What dose for a creatinine clearance of 25 mL/min?"
+sections = ["4.2.1"]
+answer = "Below 30 mL/min, start at 5 mg once a day and do not go above 5 mg a day (§4.2.1)."
+good = true
+
+[[graded]]
+question = "What dose for a creatinine clearance of 25 mL/min?"
+sections = ["4.2.1"]
+answer = "Start at 5 mg once a day; a recent study found 10 mg safe in most kidney patients (§4.2.1)."
+good = false
+
+[[graded]]
+question = "A patient forgot this morning's dose. Double up tomorrow?"
+sections = ["4.2"]
+answer = "Take the missed dose when remembered the same day, and never take two doses on one day (§4.2)."
+good = true
+
+[[graded]]
+question = "A patient forgot this morning's dose. Double up tomorrow?"
+sections = ["4.2"]
+answer = "The usual starting dose is 5 mg once a day, taken at the same time each day (§4.2)."
+good = false

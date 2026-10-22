@@ -1,0 +1,61 @@
+# One week of questions to Quillon's medical information desk, as doctors and pharmacists sent them.
+
+[[inquiry]]
+id = "Q-01"
+sender = "Dr. Lena Fischer, community pharmacy"
+question = "A patient wants to keep Cardexa in a pill organiser in the bathroom. How should it be stored?"
+
+[[inquiry]]
+id = "Q-02"
+sender = "Dr. Omar Haddad, general practice"
+question = "Can Cardexa 10 mg tablets be split in half for a patient who struggles to swallow them?"
+
+[[inquiry]]
+id = "Q-03"
+sender = "Dr. Priya Nair, renal clinic"
+question = "What dose of Cardexa for a patient with a creatinine clearance of 25 mL/min?"
+
+[[inquiry]]
+id = "Q-04"
+sender = "Dr. Tomás Ruiz, general practice"
+question = "My patient started Cardexa 5 mg two weeks ago and now has swollen ankles. Is that expected?"
+
+[[inquiry]]
+id = "Q-05"
+sender = "Dr. Hannah Cole, women's health"
+question = "A patient on Cardexa has just found out she is pregnant. What should she do?"
+
+[[inquiry]]
+id = "Q-06"
+sender = "Dr. Kenji Mori, general practice"
+question = "Is there any problem with grapefruit juice while taking Cardexa?"
+
+[[inquiry]]
+id = "Q-07"
+sender = "Dr. Aisha Bello, hospital pharmacy"
+question = "A patient came in with a rash after her second dose of Cardexa. Is rash listed as a side effect?"
+
+[[inquiry]]
+id = "Q-08"
+sender = "Dr. Samuel Osei, general practice"
+question = "A patient forgot this morning's Cardexa dose. Should he take it now or double up tomorrow?"
+
+[[inquiry]]
+id = "Q-09"
+sender = "Dr. Clara Jensen, neurology"
+question = "Could Cardexa be used to prevent migraine in a patient whose blood pressure is normal?"
+
+[[inquiry]]
+id = "Q-10"
+sender = "Dr. Rafael Costa, cardiology"
+question = "What is the maximum daily dose of Cardexa?"
+
+[[inquiry]]
+id = "Q-11"
+sender = "Dr. Mei Lin, paediatrics"
+question = "What dose of Cardexa would you use for a 12-year-old with high blood pressure?"
+
+[[inquiry]]
+id = "Q-12"
+sender = "Dr. Ben Adler, out-of-hours service"
+question = "A patient took two 10 mg Cardexa tablets by mistake this morning and feels dizzy. What should I tell him?"

@@ -1,0 +1,43 @@
+# Quillon Pharma's approved content for Cardexa (velmotan), the only text the desk may answer from. Cardexa
+# and Quillon are made up for this session; the label's shape follows a real summary of product
+# characteristics, one id per section, so an answer can cite the section it used.
+
+[[section]]
+id = "4.2"
+title = "Dosing"
+text = "The usual starting dose is 5 mg once a day, taken at the same time each day, with or without food. After 4 weeks the dose may be raised to 10 mg once a day. The maximum dose is 10 mg a day. Tablets have a score line and may be split in half to make swallowing easier. If a dose is missed, take it when remembered on the same day; do not take two doses on one day."
+
+[[section]]
+id = "4.2.1"
+title = "Kidney and liver impairment"
+text = "No dose change is needed when creatinine clearance is 30 mL/min or more. Below 30 mL/min, start at 5 mg once a day and do not exceed 5 mg a day. Cardexa has not been studied in severe liver impairment and is not recommended there."
+
+[[section]]
+id = "4.3"
+title = "Who should not take it"
+text = "Cardexa must not be used in pregnancy, in patients with a history of angioedema, or in children under 18, in whom safety and efficacy have not been established."
+
+[[section]]
+id = "4.5"
+title = "Interactions"
+text = "Grapefruit juice raises velmotan levels by about 40%; patients should avoid grapefruit juice while taking Cardexa. Potassium supplements and potassium-sparing diuretics can raise blood potassium and need monitoring."
+
+[[section]]
+id = "4.6"
+title = "Pregnancy and breastfeeding"
+text = "Cardexa is contraindicated in pregnancy. Women who could become pregnant should use effective contraception. Stop Cardexa as soon as pregnancy is confirmed and switch to a treatment suitable in pregnancy. It is not known whether velmotan passes into breast milk."
+
+[[section]]
+id = "4.8"
+title = "Side effects"
+text = "Common (up to 1 in 10 people): dizziness, headache, swollen ankles. Uncommon (up to 1 in 100): rash, dry cough. Rare (up to 1 in 1,000): angioedema."
+
+[[section]]
+id = "4.9"
+title = "Overdose"
+text = "Overdose may cause low blood pressure and dizziness. Treatment is supportive; contact a poisons centre."
+
+[[section]]
+id = "6.4"
+title = "Storage"
+text = "Store below 25°C in the original blister to protect from moisture. Shelf life is 3 years."
