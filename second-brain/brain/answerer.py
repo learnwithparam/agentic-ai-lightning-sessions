@@ -86,7 +86,7 @@ def researcher(brain: MCPServerStdio, model: Model | str) -> Agent:
 def tidy(text: str) -> str:
     """The answer as the board prints it: models space numbers with narrow and no-break spaces, and some
     mark their citations inline, which the board already shows under the answer."""
-    text = re.sub(r"\s*(【[^】]*】|\[[a-z0-9-]+\]|\(cite\))", "", text)
+    text = re.sub(r"\s*(【[^】]*】|\[(?:[Cc]ited )?[a-z0-9-]+\]|\(cite\))", "", text)
     for odd in ("\u202f", "\u00a0", "\u2009"):
         text = text.replace(odd, " ")
     return text.replace("\u2011", "-").replace(" \u2014 ", ", ").replace("\u2014", ", ").strip()

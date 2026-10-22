@@ -11,7 +11,7 @@ import pytest
 from agents import Usage
 from agents.testing import ScriptedModel, assistant_message, function_call
 
-from brain.answerer import SEED, work
+from brain.answerer import SEED, tidy, work
 from brain.board import card_page, note_page
 from brain.filer import MODEL, other_models, step
 from brain.server import calls
@@ -157,3 +157,8 @@ def test_a_second_search_is_nudged_and_a_fourth_is_refused(vault, board):
     assert not fourth["allowed"] and fourth["said"].startswith("Refused: 3 searches is the limit")
     # A refused search is not a refused citation: the card still waits because nothing was cited.
     assert board.card("C-3").log[-1] == "Needs you: no note in the brain answers it; Hannah Moreau answers"
+
+
+def test_the_board_strips_the_inline_citation_marks_models_add():
+    said = "Six stores.【steering】 Leila signs off.[Cited 2026-10-02-steering] Kings Heath [kickoff] (cite)"
+    assert tidy(said) == "Six stores. Leila signs off. Kings Heath"
