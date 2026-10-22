@@ -14,6 +14,7 @@ import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from upkeep.crew import TRACE
 
@@ -84,9 +85,16 @@ def usage(rows: list[dict]) -> dict[str, list[int]]:
     return out
 
 
-def traces(get: Get, card: str) -> list[Traced]:
-    """Every run on this card that Langfuse holds, oldest first."""
+def at(stamp: str) -> datetime:
+    return datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+
+
+def traces(get: Get, card: str, since: str | None = None) -> list[Traced]:
+    """Every run on this card that Langfuse holds, oldest first; with `since`, only this shift's."""
     roots = pages(get, name=TRACE, sessionId=card, isRootObservation="true", fields="basic,metadata")
+    # The card id is the session in every shift, so an earlier shift's runs share it.
+    if since:
+        roots = [r for r in roots if r.get("startTime") and at(r["startTime"]) >= at(since)]
     # The root is posted when a run starts and again when it ends; both rows are one run.
     latest = {r["traceId"]: r for r in sorted(roots, key=lambda r: r.get("startTime") or "")}
     out = []

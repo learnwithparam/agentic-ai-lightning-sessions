@@ -207,6 +207,18 @@ def test_every_cards_runs_match_its_traces_per_employee(tmp_path, traced):
 
 
 @pytest.mark.lab("build-an-ai-agent-dashboard-with-langfuse")
+def test_yesterdays_shift_in_langfuse_does_not_count_against_todays(tmp_path, traced):
+    """Every shift uses the card ids as sessions; the reconcile reads only this shift's traces."""
+    sent: list[str] = []
+    killed_shift(tmp_path / "yesterday", traced, sent)
+    resumed(tmp_path / "yesterday", traced, sent)
+    killed_shift(tmp_path / "today", traced, sent)
+    resumed(tmp_path / "today", traced, sent)
+    rows = run.reconcile(tmp_path / "today", traced.get)
+    assert all(r.endswith("match") for r in rows), rows
+
+
+@pytest.mark.lab("build-an-ai-agent-dashboard-with-langfuse")
 def test_a_trace_posted_only_at_its_end_loses_the_killed_runs_spend(tmp_path):
     """Mission Control's processor posts a trace when it finishes: a killed run leaves nothing behind."""
     lf = FakeLangfuse()

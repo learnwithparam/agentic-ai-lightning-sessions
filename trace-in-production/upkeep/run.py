@@ -11,10 +11,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import os
 import shutil
 import signal
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 
 from agents import Model, set_tracing_disabled
@@ -51,27 +53,33 @@ def seed(board: Board) -> None:
         board.save()
 
 
+def began(state: Path) -> str | None:
+    """When this shift's board was seeded: Langfuse keeps every earlier shift's traces too."""
+    f = state / "shift.json"
+    return json.loads(f.read_text())["started"] if f.exists() else None
+
+
 def attempts(card: Card) -> int:
     return sum(line.startswith("In flight:") for line in card.log)
 
 
-async def trace_of(get: Get, card: str, attempt: int, wait: float) -> Traced | None:
+async def trace_of(get: Get, card: str, attempt: int, wait: float, since: str | None) -> Traced | None:
     """This attempt's trace, waiting a little: Langfuse takes a few seconds to ingest what was posted."""
     for _ in range(max(int(wait / 2), 1)):
-        found = [t for t in traces(get, card) if t.attempt == str(attempt)]
+        found = [t for t in traces(get, card, since) if t.attempt == str(attempt)]
         if found:
             return found[-1]
         await asyncio.sleep(2 if wait else 0)
     return None
 
 
-async def recover(board: Board, get: Get | None, wait: float = 30) -> None:
+async def recover(board: Board, get: Get | None, since: str | None, wait: float = 30) -> None:
     """A card left In flight was being worked when the worker died: that run is recorded as failed."""
     for c in board.cards:
         if c.column != "In flight":
             continue
         n = attempts(c)
-        found = await trace_of(get, c.id, n, wait) if get else None
+        found = await trace_of(get, c.id, n, wait, since) if get else None
         if found and found.usage:
             for who, (i, o) in found.usage.items():
                 c.runs.append(Run(who, i, o, cost(i, o), False, f"{KILLED}; spend read from its trace"))
@@ -135,8 +143,11 @@ async def shift(
     wait: float = 30,
 ) -> Board:
     board, cmms = Board.open(state / "board.json"), Cmms.open(state / "cmms.json")
+    if not board.cards:
+        state.mkdir(parents=True, exist_ok=True)
+        (state / "shift.json").write_text(json.dumps({"started": datetime.now(UTC).isoformat()}))
     seed(board)
-    await recover(board, get, wait)
+    await recover(board, get, began(state), wait)
     m, send = m or model(), send or telegram()
     for c in board.cards:
         if c.column == "Done":
@@ -155,7 +166,7 @@ def reconcile(state: Path, get: Get) -> list[str]:
     """Each card's runs against its traces: one trace per run, and the same tokens per employee."""
     board, out = Board.open(state / "board.json"), []
     for c in board.cards:
-        found = traces(get, c.id)
+        found = traces(get, c.id, began(state))
         mine: dict[str, list[int]] = {}
         for r in c.runs:
             tally = mine.setdefault(r.employee, [0, 0])
