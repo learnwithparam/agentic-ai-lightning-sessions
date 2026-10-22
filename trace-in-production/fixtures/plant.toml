@@ -1,0 +1,95 @@
+# Line 2 at Brekke Dairy's bottling plant: each machine, its sensor's last five readings, and the
+# maintenance manual's procedure for its fault. The repair planner books only a procedure listed here.
+
+[[machine]]
+id = "F2"
+name = "Filler F2"
+sensor = "Pump bearing vibration"
+unit = "mm/s"
+limit = "7.1 at most"
+readings = [4.1, 4.3, 6.8, 9.9, 11.2]
+
+[[machine]]
+id = "P1"
+name = "Pasteuriser P1"
+sensor = "Holding tube temperature"
+unit = "°C"
+limit = "72.0 at least"
+readings = [72.4, 72.3, 72.1, 71.6, 71.2]
+
+[[machine]]
+id = "C3"
+name = "Capper C3"
+sensor = "Torque faults per hour"
+unit = "faults"
+limit = "3 at most"
+readings = [1, 2, 6, 11, 14]
+
+[[machine]]
+id = "K1"
+name = "Ammonia compressor K1"
+sensor = "Oil pressure"
+unit = "bar"
+limit = "2.0 at least"
+readings = [2.6, 2.5, 2.2, 1.9, 1.6]
+
+[[machine]]
+id = "L1"
+name = "Labeller L1"
+sensor = "Photo-eye blocked seconds"
+unit = "s"
+limit = "5 at most"
+readings = [0, 0, 40, 0, 0]
+
+[[machine]]
+id = "R1"
+name = "Palletiser R1"
+sensor = "Servo motor temperature"
+unit = "°C"
+limit = "80 at most"
+readings = [64, 69, 75, 83, 88]
+
+[[procedure]]
+id = "MP-F2-07"
+machine = "F2"
+fault = "Pump bearing vibration"
+steps = "Lock out the filler, replace pump bearing 6205-2RS, realign the coupling"
+part = "Bearing 6205-2RS"
+skill = "Mechanic"
+hours = 2.0
+
+[[procedure]]
+id = "MP-P1-02"
+machine = "P1"
+fault = "Holding tube under temperature"
+steps = "Divert product, calibrate the holding tube probe, check the steam valve"
+part = "Probe PT100"
+skill = "Instrument technician"
+hours = 1.5
+
+[[procedure]]
+id = "MP-C3-04"
+machine = "C3"
+fault = "Torque faults"
+steps = "Reset the capping heads' clutch torque, replace worn chuck inserts"
+part = "Chuck insert 38 mm"
+skill = "Mechanic"
+hours = 1.0
+
+[[procedure]]
+id = "MP-K1-11"
+machine = "K1"
+fault = "Low oil pressure"
+steps = "Isolate the compressor, replace the oil filter, top up refrigeration oil"
+part = "Oil filter K-200"
+skill = "Refrigeration technician"
+hours = 2.5
+
+[[procedure]]
+id = "MP-R1-03"
+machine = "R1"
+fault = "Servo overtemperature"
+steps = "Clean the servo fan and filter, check the drive's current draw"
+part = "Fan filter 120 mm"
+skill = "Electrician"
+hours = 1.0

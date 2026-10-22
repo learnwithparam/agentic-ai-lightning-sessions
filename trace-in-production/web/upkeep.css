@@ -1,0 +1,10 @@
+/* What production adds to Mission Control: spend by employee, the budget's state, and a card's order. */
+.tbl.spend{margin-bottom:16px}
+.tbl.spend td.n,.tbl.spend th.n{text-align:right;font-variant-numeric:tabular-nums}
+.verdict{display:flex;flex-direction:column;gap:4px;margin:0 0 28px;padding:12px 16px;border-radius:10px}
+.verdict b{font-size:16px}
+.verdict.no{background:var(--wait-bg);color:var(--wait-ink)}
+.verdict.ok{background:var(--pass-bg);color:var(--pass)}
+.receipt.order{margin:16px 0 0}
+.receipt.order p+p{margin-top:6px}
+.trace{margin:16px 0 0;font-size:14px}

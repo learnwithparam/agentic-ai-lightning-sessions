@@ -1,0 +1,44 @@
+# One early shift's alerts on Line 2, in the order they fired. A-05 is the same fault as A-01, and
+# A-06 cleared by itself: a good crew books five repairs, not seven.
+
+[[alert]]
+id = "A-01"
+at = "06:12"
+machine = "F2"
+says = "Pump bearing vibration 11.2 mm/s, limit 7.1"
+
+[[alert]]
+id = "A-02"
+at = "06:31"
+machine = "P1"
+says = "Holding tube 71.2 °C, below the 72.0 minimum"
+
+[[alert]]
+id = "A-03"
+at = "06:48"
+machine = "C3"
+says = "14 torque faults in the last hour"
+
+[[alert]]
+id = "A-04"
+at = "07:05"
+machine = "K1"
+says = "Oil pressure 1.6 bar, below the 2.0 minimum"
+
+[[alert]]
+id = "A-05"
+at = "07:20"
+machine = "F2"
+says = "Pump bearing vibration 11.6 mm/s, limit 7.1"
+
+[[alert]]
+id = "A-06"
+at = "07:34"
+machine = "L1"
+says = "Photo-eye blocked for 40 seconds"
+
+[[alert]]
+id = "A-07"
+at = "07:52"
+machine = "R1"
+says = "Servo motor 88 °C, limit 80"

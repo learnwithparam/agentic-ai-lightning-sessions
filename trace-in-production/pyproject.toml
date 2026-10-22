@@ -1,0 +1,36 @@
+[project]
+name = "trace-in-production"
+version = "0.1.0"
+description = "A dairy plant's maintenance agents book each repair once, survive a kill mid-run, and report their spend per agent from Langfuse traces, with a budget alert on Telegram"
+requires-python = ">=3.13"
+dependencies = [
+    "aiohttp==3.14.4",
+    "openai-agents==0.23.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.1.1",
+    "ruff==0.16.7",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# The board, its cards and the model come from mission-control, the app every Lightning extends.
+pythonpath = [".", "../mission-control"]
+addopts = "--import-mode=importlib -q --strict-markers"
+markers = ["lab(slug): the acceptance test for one Lightning, named in steps.toml"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S"]
+ignore = ["S101"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["upkeep", "workforce"]

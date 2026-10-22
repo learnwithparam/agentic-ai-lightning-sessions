@@ -1,0 +1,8 @@
+# What this session's system can do, one row per promise. `built` steps must have a test marked
+# @pytest.mark.lab("<slug>"), and tests/test_steps.py fails when one is missing or unlisted.
+
+[[step]]
+slug = "build-an-ai-agent-dashboard-with-langfuse"
+session = "Lightning, Thu 10 Dec 2026"
+promise = "A dairy plant's maintenance crew of two agents turns machine alerts into repair orders; the worker is killed right after an order is written and resumes from the board, the maintenance system hands back the order already there so every order exists once, each run streams its spans to Langfuse so the killed run's spend is read back from its trace, every card's runs match its traces per employee, and the shift's budget alert goes to the maintenance lead once."
+built = true
