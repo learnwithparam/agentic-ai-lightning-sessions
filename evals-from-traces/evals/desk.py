@@ -11,6 +11,7 @@ model and a tidier prompt. It answers the same inquiries only when `make demo` r
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -166,6 +167,11 @@ def desk(model: Model | str, prompt: str) -> Agent[Record]:
     )
 
 
+# OpenRouter keeps a stalled request alive with keep-alive bytes, so the client's read timeout never fires;
+# one inquiry hung a live make demo for 16 minutes on 22 Oct 2026.
+RUN_SECONDS = 120
+
+
 def openrouter(name: str) -> Model | str:
     """A model by its OpenRouter id, with the one-minute timeout mission-control's model has."""
     key = os.environ.get("OPENROUTER_API_KEY")
@@ -188,13 +194,14 @@ async def handle(inquiry: dict, v: Variant, model: Model | str) -> Record:
     rec = Record(inquiry["id"])
     config = RunConfig(workflow_name=v.trace, group_id=inquiry["id"], trace_metadata={"card": inquiry["id"]})
     try:
-        result = await Runner.run(
-            desk(model, v.prompt), ask(inquiry), context=rec, max_turns=6, run_config=config
+        result = await asyncio.wait_for(
+            Runner.run(desk(model, v.prompt), ask(inquiry), context=rec, max_turns=6, run_config=config),
+            RUN_SECONDS,
         )
         u = result.context_wrapper.usage
         rec.tokens_in, rec.tokens_out = u.input_tokens, u.output_tokens
         rec.cost = v.cost(u.input_tokens, u.output_tokens)
-    except (AgentsException, APIError):
+    except (AgentsException, APIError, TimeoutError):
         pass  # a run that never acted is scored as one: route None fails its route check
     return rec
 

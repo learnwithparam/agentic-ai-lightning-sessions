@@ -218,3 +218,16 @@ def test_the_gate_refuses_fewer_passes_without_a_critical_miss_and_ships_an_equa
     worse = [*prod[:-1], score(case("Q-12", acting("Q-12", "decline", {"reason": "x"})))]
     assert gate(prod, worse).reasons == ["passes 11 of 12; production passes 12"]
     assert gate(prod, prod).ok
+
+
+def test_a_model_that_never_returns_is_cut_off_and_scored_as_a_run_that_never_acted(monkeypatch):
+    class Stalled(ScriptedModel):
+        async def get_response(self, *args, **kwargs):
+            await asyncio.sleep(3600)
+
+    monkeypatch.setattr("evals.desk.RUN_SECONDS", 0.05)
+    from evals.desk import handle
+
+    rec = asyncio.run(handle(BY_ID["Q-07"], VARIANTS["candidate"], Stalled([])))
+    assert rec.route is None
+    assert not code_checks(Case(BY_ID["Q-07"], LABELS["Q-07"], rec), rec)[0].ok

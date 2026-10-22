@@ -8,6 +8,7 @@ Okafor graded by hand, and counts on the test set only when it agrees with her o
 
 from __future__ import annotations
 
+import asyncio
 import os
 import tomllib
 from dataclasses import dataclass
@@ -16,7 +17,7 @@ from agents import Agent, AgentsException, Model, RunConfig, Runner
 from openai import APIError
 from pydantic import BaseModel
 
-from evals.desk import FIXTURES, SECTIONS, openrouter
+from evals.desk import FIXTURES, RUN_SECONDS, SECTIONS, openrouter
 from evals.score import Check, Scored
 
 GRADED = tomllib.loads((FIXTURES / "graded.toml").read_text())["graded"]
@@ -65,14 +66,17 @@ def ask(question: str, sections: list[str], answer: str) -> str:
 async def verdict(model: Model | str, question: str, sections: list[str], answer: str) -> Verdict | None:
     for _ in range(2):  # one retry: a judge call that fails is no evidence about the answer
         try:
-            result = await Runner.run(
-                judge(model),
-                ask(question, sections, answer),
-                max_turns=1,
-                run_config=RunConfig(workflow_name="Eval judge"),
+            result = await asyncio.wait_for(
+                Runner.run(
+                    judge(model),
+                    ask(question, sections, answer),
+                    max_turns=1,
+                    run_config=RunConfig(workflow_name="Eval judge"),
+                ),
+                RUN_SECONDS,
             )
             return result.final_output_as(Verdict)
-        except (AgentsException, APIError):
+        except (AgentsException, APIError, TimeoutError):
             continue
     return None
 
