@@ -119,7 +119,7 @@ def build(state: Path, get: Get | None = None) -> tuple[list[Case], str]:
         for rec in runs.values():
             rec.cost = v.cost(rec.tokens_in, rec.tokens_out)
     else:
-        runs, source = read_log(state, "production"), "the local run log"
+        runs, source = read_log(state, "production"), "the run log"
     by_id = {q["id"]: q for q in INQUIRIES}
     cases = [Case(by_id[i], label, runs.get(i, Record(i))) for i, label in LABELS.items()]
     return cases, source

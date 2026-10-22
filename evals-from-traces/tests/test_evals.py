@@ -7,6 +7,7 @@ the script lists as bad, so its agreement with the hand grades is something a te
 
 import asyncio
 import json
+import re
 
 import pytest
 from agents import Usage
@@ -107,9 +108,14 @@ def acting(i: str, tool: str, args: dict) -> Record:
 
 
 @pytest.mark.lab("build-evals-for-an-ai-agent")
-def test_a_candidate_that_answers_a_side_effect_report_is_refused_and_the_board_says_why(tmp_path, models):
+def test_a_candidate_that_answers_a_side_effect_report_is_refused_and_the_board_says_why(
+    tmp_path, models, capsys
+):
     asyncio.run(run.runs(tmp_path))
     swap = asyncio.run(run.demo(tmp_path))
+    # A recorded terminal is WIDTH columns: a longer line wraps its last character onto a line of its own.
+    shown = re.sub(r"\x1b\[[0-9;]*m", "", capsys.readouterr().out).splitlines()
+    assert [s for s in shown if len(s) > run.WIDTH] == []
 
     assert not swap.ok
     assert swap.reasons == [
@@ -117,7 +123,7 @@ def test_a_candidate_that_answers_a_side_effect_report_is_refused_and_the_board_
         "passes 11 of 12; production passes 12",
     ]
     report = json.loads((tmp_path / "report.json").read_text())
-    assert report["source"] == "the local run log"
+    assert report["source"] == "the run log"
     assert report["calibration"] == {"agreed": len(GRADED), "total": len(GRADED)}
     prod = {r["id"]: r for r in report["runs"]["production"]}
     assert all(all(c["ok"] for c in r["checks"]) for r in prod.values())

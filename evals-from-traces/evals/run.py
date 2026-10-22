@@ -39,7 +39,8 @@ async def runs(state: Path = STATE, variant: str = "production") -> list[Record]
     for q in INQUIRIES:
         rec = await handle(q, v, model)
         out.append(rec)
-        print(f"  {q['id']}  {SAID[rec.route]:<15} {fit(rec.text, WIDTH - 23)}")
+        line = f"  {q['id']}  {SAID[rec.route]:<15} "
+        print(line + fit(rec.text, WIDTH - len(line)))
     write_log(state, variant, out)
     return out
 
