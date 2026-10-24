@@ -1,0 +1,9 @@
+{
+  "$comment": "Read by the lwp-eng plugin hooks (Param-Harrison/lwp-claude-plugins). The ruff pin matches the sessions' pyproject.toml, so an edit formats as each session's gate checks.",
+  "name": "agentic-ai-lightning-sessions",
+  "gate": "make check",
+  "test": "make check",
+  "formatters": {
+    ".py": "uvx ruff@0.16.7 format"
+  }
+}
