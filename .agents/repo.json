@@ -5,5 +5,8 @@
   "test": "make check",
   "formatters": {
     ".py": "uvx ruff@0.16.7 format"
+  },
+  "ci": {
+    "runner": "github"
   }
 }
