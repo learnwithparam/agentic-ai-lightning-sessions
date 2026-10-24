@@ -1,7 +1,8 @@
 """Every Lightning in sessions.toml is either built, with a folder whose steps.toml marks its slug built,
 or not built and has no folder yet. Every folder with a Makefile is a listed session, so a demo cannot
 ship in this repo without a row a reader can find. Every row names the board job, the truth outside the
-model, the screen the room watches and what it sells, so no session is planned as code on slides."""
+model, the screen the room watches and what it sells, so no session is planned as code on slides.
+AGENTS.md is the one brief every agent reads, and CLAUDE.md only imports it, so the two cannot drift."""
 
 import sys
 import tomllib
@@ -27,6 +28,11 @@ def problems() -> list[str]:
         steps = tomllib.loads((d / "steps.toml").read_text())["step"] if (d / "steps.toml").exists() else []
         if not any(st["slug"] == s["slug"] and st["built"] for st in steps):
             out.append(f"{s['folder']}: steps.toml does not mark {s['slug']} built")
+    if not (ROOT / "AGENTS.md").is_file():
+        out.append("AGENTS.md: missing; every agent starts blind")
+    claude = ROOT / "CLAUDE.md"
+    if not claude.is_file() or "@AGENTS.md" not in claude.read_text().split():
+        out.append("CLAUDE.md: must import @AGENTS.md, so Claude reads the same brief")
     for mk in ROOT.glob("*/Makefile"):
         if mk.parent.name not in folders:
             out.append(f"{mk.parent.name}: a session folder missing from sessions.toml")

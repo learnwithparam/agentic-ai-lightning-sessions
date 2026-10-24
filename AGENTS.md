@@ -3,6 +3,7 @@
 One folder per free Lightning session; `sessions.toml` is the index.
 
 - `make check` runs `scripts/check_sessions.py`, then each built folder's own `make check`.
+- `CLAUDE.md` is only `@AGENTS.md`; this file is the brief for every agent, and the script fails a second one.
 - A session is `built` only when its folder exists, its gate passes and its `steps.toml` marks the
   session's slug built. A session not built has no folder. The script enforces both ways.
 - Slugs and titles are Maven's; never rename one here without renaming it on Maven.
