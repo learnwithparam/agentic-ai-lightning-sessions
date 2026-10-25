@@ -6,10 +6,21 @@ set -uo pipefail
 
 gate=$1
 sent=0
-while read -r _lref lsha _rref _rsha; do
+while read -r _lref lsha _rref rsha; do
   # A deleted branch pushes the zero sha; there is nothing to check.
   [ -n "${lsha//0/}" ] || continue
-  out=$(lwpr run -d --trigger push --commit "$lsha" -- "$gate" 2>&1) || {
+  # The box gets a tree with no history, so check-affected there would run the full gate; name the pushed
+  # files instead. A new branch diffs from where it left the default branch.
+  run=$gate
+  case $gate in "python3 scripts/lwp/check-affected.py"*)
+    base=$rsha
+    [ -n "${base//0/}" ] && git cat-file -e "$base" 2>/dev/null \
+      || base=$(git merge-base "$lsha" "$(git symbolic-ref -q --short refs/remotes/origin/HEAD || echo origin/main)" 2>/dev/null)
+    files=$([ -n "$base" ] && git diff --name-only "$base" "$lsha" | paste -sd, -)
+    [ -n "$files" ] && run="$gate --files $(printf '%q' "$files")"
+    ;;
+  esac
+  out=$(lwpr run -d --trigger push --commit "$lsha" -- "$run" 2>&1) || {
     printf '%s\n' "$out" >&2
     exit 1
   }
