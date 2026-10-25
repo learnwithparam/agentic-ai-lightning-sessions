@@ -14,10 +14,39 @@ jobs:
   push:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # actions: read lets the report step fetch the last runs' reports
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v6
       - run: make check
+      # Flags a flaky test from the last runs' reports; mark it quarantine and it moves to the job below.
+      - uses: ctrf-io/github-test-reporter@93ff46b55aefe633bde6d13e61a7f533303233e6 # v1.3.2
+        if: always()
+        with:
+          report-path: reports/*.xml
+          integrations-config: '{"junit-to-ctrf": {"enabled": true, "action": "convert", "options": {"output": "reports/ctrf.json"}}}'
+          summary-report: true
+          flaky-rate-report: true
+          fail-rate-report: true
+          upload-artifact: true
+          fetch-previous-results: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # only the tests marked quarantine; it never blocks a push
+  quarantine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+      - run: make quarantine
 
   # The deploy promise needs real Keycloak, OpenFGA and Langfuse, so it runs against compose.yaml here.
   stack:
