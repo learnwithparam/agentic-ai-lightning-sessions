@@ -3,6 +3,8 @@
 # hook can drift. git's ref lines arrive on stdin. Why: docs/decisions/scripts.md#pre-pushsh
 set -uo pipefail
 cd "$(git rev-parse --show-toplevel)"
+# git hands a hook in a linked worktree GIT_DIR, and a gate's tests that make their own repos then hit this one.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX
 
 # A push that only deletes refs sends no commit, so there is nothing to gate: deleting a merged
 # branch ran the whole gate on the lwpr box (22 Oct 2026). A delete has an all-zero local sha.
