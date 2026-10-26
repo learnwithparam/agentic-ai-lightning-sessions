@@ -8,5 +8,14 @@
   },
   "ci": {
     "runner": "github"
-  }
+  },
+  "stageGates": {
+    "stop": "make check && python3 scripts/lwp/check-security.py gitleaks,semgrep,osv-scanner",
+    "push": "make check && python3 scripts/lwp/check-security.py gitleaks,semgrep,osv-scanner"
+  },
+  "$stageGates": "push matches stop so the scanners run before every push, not the gate alone; CI runs the same scan.",
+  "kitExtras": [
+    "scripts/lwp/check-security.py",
+    "scripts/lwp/semgrep.yml"
+  ]
 }
