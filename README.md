@@ -12,6 +12,9 @@ can run offline.
 
 Later sessions are listed in [`sessions.toml`](sessions.toml) and get a folder here once they are built.
 
+[`factory/`](factory/) keeps the teaching material of the earlier Software Factory sessions, as an
+archive with no gate.
+
 ```
 make check                         # every built session's gate, offline: no keys, no spend
 make -C mission-control demo FRESH=1
