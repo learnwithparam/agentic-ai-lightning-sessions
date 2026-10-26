@@ -8,5 +8,6 @@ v5.1.0). They are kept as they stood at factory v5.0.1 and nothing here is gated
   checkpoint tag.
 - `lightning-2.md` is the live run sheet; `demo/lightning-2.sh` builds its tmux layout. Run it from
   a factory checkout at tag v5.0.1, where `teach/` still exists.
-- `worksheets/` is the static site once published from the factory repo's GitHub Pages.
+- `worksheets/` is the static site at https://learnwithparam.github.io/agentic-ai-lightning-sessions/,
+  published by `.github/workflows/worksheets.yml`.
 - `research/` holds the notes on Claude memory and Anthropic pricing the factory was built from.
