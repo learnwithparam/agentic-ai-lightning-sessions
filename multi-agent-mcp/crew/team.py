@@ -181,8 +181,8 @@ def build_crew(gateways: dict[AgentName, MCPServerStdio], model: Model | str) ->
         gateways[AgentName.BOOKER],
         model,
         "You book flights for KaaS Travel's travellers. Book the flight the planner chose with "
-        "book_flight. If the travel system refuses it, book the next option the planner listed. Then hand "
-        "the card to the messenger.",
+        "book_flight. If the travel system refuses it, book the next option the planner listed. Hand the card "
+        "to the messenger only after a booking went through or every option was refused.",
         handoff_description="Books one flight from the planner's options.",
         handoffs=[build_messenger(gateways[AgentName.MESSENGER], model)],
         reset_tool_choice=False,
@@ -333,7 +333,13 @@ async def work(
     else:
         employees = [AgentName.TRIP_PLANNER, AgentName.BOOKER, AgentName.MESSENGER]
         build_first_agent = build_crew
-    return await run_employees(board, card, employees, build_first_agent, model, live)
+    card = await run_employees(board, card, employees, build_first_agent, model, live)
+    # A real model sometimes hands over before booking; the card has no ticket, so the crew tries once more.
+    if not alone and Travel(board.path.parent).ticket(card.id) is None:
+        card = await run_employees(
+            board, card, employees, build_first_agent, model, live
+        )
+    return card
 
 
 async def resume_after_approval(

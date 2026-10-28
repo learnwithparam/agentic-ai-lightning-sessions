@@ -137,6 +137,28 @@ def test_the_card_is_done_only_when_a_ticket_lands_in_time_and_both_contacts_wer
 
 
 @pytest.mark.lab("build-a-team-of-ai-agents")
+def test_the_crew_tries_again_when_the_booker_hands_over_without_booking(board):
+    model = ScriptedModel(
+        [
+            [function_call("transfer_to_booker", {}, call_id="a1")],
+            [function_call("transfer_to_messenger", {}, call_id="a2")],
+            [assistant_message("Nothing to tell yet.")],
+            [function_call("transfer_to_booker", {}, call_id="c1")],
+            [function_call("book_flight", {"flight_id": "EW461"}, call_id="c2")],
+            [function_call("transfer_to_messenger", {}, call_id="c3")],
+            told("Priya Shah", call_id="c4"),
+            told("Klaus Bergmann", call_id="c5"),
+            [assistant_message("Priya and Klaus know she lands at 11:55.")],
+        ],
+        default_usage=TOKENS,
+    )
+    card = asyncio.run(work(board, board.cards[0], model=model))
+
+    assert card.column == "Done"
+    assert len(card.runs) == 2
+
+
+@pytest.mark.lab("build-a-team-of-ai-agents")
 def test_a_ticket_nobody_was_told_about_never_closes_the_card(board):
     card = asyncio.run(
         work(board, board.cards[0], model=crew_model(told("Priya Shah", call_id="m2")))

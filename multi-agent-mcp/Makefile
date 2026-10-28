@@ -5,7 +5,7 @@ SHELL := /bin/bash
 RUN := PYTHONPATH=../mission-control uv run --quiet
 KEYS := --env-file ../mission-control/.env
 
-.PHONY: help check demo solo board rehearse
+.PHONY: help check demo solo board rehearse record
 
 help: ## List every target
 	@grep -E '^[a-z0-9-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[33m%-8s\033[0m %s\n", $$1, $$2}'
@@ -26,3 +26,7 @@ board: ## Serve the signed-in board on http://127.0.0.1:8090 (make board SOLO=1 
 
 rehearse: ## Sign in as Priya and Dana on the running board and walk the approval to Done
 	$(RUN) $(KEYS) python rehearse.py
+
+DECK := ../../../internal-apps/lwp-deck
+record: ## Record a deck clip signed in to the board (make record CLIP=crew-approve); stop make board first
+	$(RUN) $(KEYS) bash -c 'cd $(DECK) && node scripts/record-screen.mjs build-a-multi-agent-system-with-mcp $(CLIP)'
