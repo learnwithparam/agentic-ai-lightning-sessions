@@ -1,4 +1,4 @@
-"""The claims reader: an AI employee that reads each document on an Acme Insurance claim into its claim file.
+"""The claims reader: an AI employee that reads each document on a KaaS Insurance claim into its claim file.
 
 Documents arrive one at a time, photos and the body shop's quote, and after each one the reader returns
 the claim file as it stands. Three levers change what each read costs and nothing about what it reads:
@@ -9,7 +9,9 @@ the claim file as it stands. Three levers change what each read costs and nothin
 3. Think less: reading a photo into a claim file needs little reasoning, and reasoning tokens are billed
    as output, five times the input price. Off, the model reasons at its default effort.
 
-`make demo` runs the same three claims four times, adding one lever each pass, each pass in its own state.
+`make passes` runs the same three claims four times, adding one lever each pass, each pass in its own state.
+`make demo PASS=N` runs one of them live. A claim that hits its budget waits for the adjuster, who raises
+that claim's budget on the board, and only that claim resumes from the document it stopped at.
 `settle` asks the claims system, never the reader.
 """
 
@@ -18,7 +20,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
+import json
 import shutil
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -35,6 +39,7 @@ from workforce.mission import paint
 
 ROOT = Path(__file__).resolve().parent.parent
 STATE = ROOT / ".claims"
+LIVE = ROOT / ".claims-live"
 READER = "Claims reader"
 POLICY = (FIXTURES / "policy.md").read_text()
 TEAM = (
@@ -49,7 +54,7 @@ TEAM = (
 SEED = (
     Card("C-7", "Front damage, hit a tree", "Priya Shah", "CL-301"),
     Card("C-8", "Hit from behind at the lights", "Tom Brennan", "CL-302"),
-    Card("C-9", "Hail at the Northgate depot", "Northgate Car Hire", "CL-303"),
+    Card("C-9", "Hail damage at a car hire depot", "A car hire firm", "CL-303"),
 )
 
 
@@ -82,12 +87,12 @@ class Read:
     turn: int
 
 
-def stamped(ctx: RunContextWrapper[Read], agent: Agent[Read]) -> str:
+def stamped(context: RunContextWrapper[Read], agent: Agent[Read]) -> str:
     # The anti-pattern this session removes: a line that differs on every call, above the long policy.
-    r = ctx.context
+    current = context.context
     return (
-        f"Claims desk run {datetime.now(UTC).isoformat()} for {r.claim['id']}, document {r.turn} of "
-        f"{len(r.claim['documents'])}.\n\n{POLICY}"
+        f"Claims desk run {datetime.now(UTC).isoformat()} for {current.claim['id']}, document "
+        f"{current.turn} of {len(current.claim['documents'])}.\n\n{POLICY}"
     )
 
 
@@ -128,36 +133,86 @@ def ask(claim: dict, doc: str, levers: Levers, thread: list) -> list:
     return [*thread, {"role": "user", "content": [*lead, *document(doc, detail)]}]
 
 
-async def read_claim(claims: Claims, cid: str, model: Model | str, levers: Levers) -> None:
-    """Every document on one claim, one read each, each recorded in the ledger, then the claim file filed."""
-    claim, agent = claims.claim(cid), reader(model, levers)
-    thread: list[TResponseInputItem] = []
+def assistant_item(claim_file: dict) -> dict:
+    return {
+        "id": "claim-file",
+        "role": "assistant",
+        "type": "message",
+        "status": "completed",
+        "content": [{"type": "output_text", "text": json.dumps(claim_file), "annotations": []}],
+    }
+
+
+def thread_so_far(claim: dict, rows: list[dict], levers: Levers) -> list:
+    """The chat a resumed claim carries on from: each document read and the claim file it got."""
+    thread: list = []
+    for row in rows:
+        thread = ask(claim, row["doc"], levers, thread)
+        thread.append(assistant_item(row["claim_file"]))
+    return thread
+
+
+def read_line(claim_id: str, row: dict) -> str:
+    return (
+        f"{claim_id}  {row['doc']} {row['input']:,} in {row['cached']:,} cached "
+        f"{row['output']:,} out  {usd(row['cost'])}"
+    )
+
+
+async def read_claim(
+    claims: Claims,
+    claim_id: str,
+    model: Model | str,
+    levers: Levers,
+    show: Callable[[str], None] | None = None,
+) -> None:
+    """The documents not yet in the ledger, one read each, then the claim file filed from the last read."""
+    claim, agent = claims.claim(claim_id), reader(model, levers)
+    already = claims.ledger(claim_id)
+    thread: list[TResponseInputItem] = thread_so_far(claim, already, levers)
     for turn, doc in enumerate(claim["documents"], 1):
-        claims.allow(cid, doc)
+        if turn <= len(already):
+            continue
+        claims.allow(claim_id, doc)
         result = await Runner.run(
             agent, ask(claim, doc, levers, thread), context=Read(claim, doc, turn), max_turns=1
         )
-        claims.record(cid, doc, result.context_wrapper.usage)
+        claim_file = result.final_output_as(ClaimFile).model_dump()
+        row = claims.record(claim_id, doc, result.context_wrapper.usage, claim_file)
+        if show:
+            show(read_line(claim_id, row))
         thread = result.to_input_list()
-    claims.file(cid, result.final_output_as(ClaimFile).model_dump())
+    claims.file(claim_id, claims.ledger(claim_id)[-1]["claim_file"])
 
 
-def steps(claims: Claims, cid: str) -> list[str]:
+def steps(rows: list[dict]) -> list[str]:
     return [
-        f"Read {t['doc']}: {t['input']:,} in, {t['cached']:,} cached, {t['output']:,} out, {usd(t['cost'])}"
-        for t in claims.ledger(cid)
+        f"Read {row['doc']}: {row['input']:,} in, {row['cached']:,} cached, {row['output']:,} out, "
+        f"{usd(row['cost'])}"
+        for row in rows
     ]
 
 
 def settle(board: Board, card: Card, claims: Claims) -> None:
-    cid = card.issue
-    stop, filed, refused = claims.stopped(cid), claims.filed(cid), claims.refused(cid)
+    claim_id = card.issue
+    total = len(claims.claim(claim_id)["documents"])
+    stop = claims.stopped(claim_id)
+    declined = claims.declined(claim_id)
+    refused = claims.refused(claim_id)
+    filed = claims.filed(claim_id)
+    read = len(claims.ledger(claim_id))
     if stop:
-        n = len(claims.claim(cid)["documents"])
         board.move(
             card,
             "Needs you",
-            f"{usd(claims.budget)} budget hit, {stop['read']} of {n} read; {claims.adjuster} decides",
+            f"{usd(claims.budget_for(claim_id))} budget hit, {stop['read']} of {total} read; "
+            f"raise the budget? {claims.adjuster} decides",
+        )
+    elif declined:
+        board.move(
+            card,
+            "Backlog",
+            f"{claims.adjuster} kept the budget; {read} of {total} read, an assessor visits",
         )
     elif refused:
         board.move(card, "Backlog", f"refused: {refused}")
@@ -166,42 +221,71 @@ def settle(board: Board, card: Card, claims: Claims) -> None:
     elif filed["total"]:
         board.move(card, "Done", f"filed, {filed['total']} matches the quote")
     else:
-        board.move(card, "Done", f"filed, {filed['vehicles']} cars; an assessor prices it")
+        photos = len([doc for doc in claims.claim(claim_id)["documents"] if not doc.endswith(".pdf")])
+        board.move(
+            card, "Done", f"filed, {filed['vehicles']} cars from {photos} photos; an assessor prices it"
+        )
 
 
-async def work(board: Board, card: Card, levers: Levers, model: Model | str | None = None) -> Card:
+async def work(
+    board: Board,
+    card: Card,
+    levers: Levers,
+    model: Model | str | None = None,
+    show: Callable[[str], None] | None = None,
+) -> Card:
+    """One claim, from where its ledger left off: a new claim starts at its first document."""
     model = model or default_model()
     claims = Claims.open(board.path.parent)
-    board.move(card, "In flight", f"{READER} picked it up")
+    before = len(claims.ledger(card.issue))
+    if before:
+        resumed_at = claims.claim(card.issue)["documents"][before]
+        board.move(card, "In flight", f"{READER} picked it up again at {resumed_at}")
+    else:
+        board.move(card, "In flight", f"{READER} picked it up")
     card.employee = READER
     try:
-        await read_claim(claims, card.issue, model, levers)
-        ok, said = True, "claim file filed"
-    except Refused as e:
-        ok, said = True, str(e)
-    except (AgentsException, APIError) as e:
-        ok, said = False, f"run failed: {type(e).__name__}"
-    rows = claims.ledger(card.issue)
+        await read_claim(claims, card.issue, model, levers, show)
+        succeeded, said = True, "claim file filed"
+    except Refused as refusal:
+        succeeded, said = True, str(refusal)
+    except (AgentsException, APIError) as error:
+        succeeded, said = False, f"run failed: {type(error).__name__}"
+    rows = claims.ledger(card.issue)[before:]
     card.runs.append(
         Run(
             READER,
-            sum(t["input"] for t in rows),
-            sum(t["output"] for t in rows),
-            claims.spent(card.issue),
-            ok,
+            sum(row["input"] for row in rows),
+            sum(row["output"] for row in rows),
+            sum(row["cost"] for row in rows),
+            succeeded,
             said,
-            steps(claims, card.issue),
-            [t["doc"] for t in rows],
+            steps(rows),
+            [row["doc"] for row in rows],
         )
     )
     settle(board, card, claims)
     return card
 
 
-def report(board: Board, card: Card) -> None:
-    """One claim as the room reads it off a projector: each read and its cost, where the card landed."""
-    for line in card.runs[-1].steps:
-        print("  " + line)
+async def resume_after_raise(
+    board: Board, card: Card, levers: Levers, model: Model | str | None = None
+) -> Card:
+    """The adjuster raised this claim's budget: read the documents it stopped before, and file."""
+    return await work(board, card, levers, model)
+
+
+def report(board: Board, card: Card, claims: Claims) -> None:
+    """One claim as the room reads it off a projector: where it stopped, where the card landed."""
+    stop = claims.stopped(card.issue)
+    if stop:
+        budget = usd(claims.budget_for(card.issue))
+        print(
+            paint(
+                f"{card.issue} stopped before {stop['before']}: one more read would cross its {budget}",
+                "33",
+            )
+        )
     tone = {"Done": "1;32", "Needs you": "1;33"}.get(card.column, "1;31")
     print(paint(f"{card.issue} {card.column}: {card.log[-1].split(': ', 1)[-1]}", tone))
 
@@ -210,7 +294,7 @@ def report(board: Board, card: Card) -> None:
 class Pass:
     """One pass of the ladder, every number from its board and its claims system's ledger."""
 
-    n: int
+    number: int
     name: str
     board: Board
     fresh: int
@@ -219,7 +303,7 @@ class Pass:
 
     @property
     def filed(self) -> int:
-        return sum(c.column == "Done" for c in self.board.cards)
+        return sum(card.column == "Done" for card in self.board.cards)
 
     @property
     def per_claim(self) -> float | None:
@@ -232,54 +316,75 @@ class Pass:
 
 
 def passes(state: Path = STATE) -> list[Pass]:
-    out = []
-    for n, (name, _) in enumerate(LADDER, 1):
-        if not (f := state / f"pass-{n}" / "board.json").exists():
+    found = []
+    for number, (name, _) in enumerate(LADDER, 1):
+        board_file = state / f"pass-{number}" / "board.json"
+        if not board_file.exists():
             continue
-        board, claims = Board.open(f), Claims.open(f.parent)
-        rows = [t for c in board.cards for t in claims.ledger(c.issue)]
-        cached = sum(t["cached"] for t in rows)
-        out.append(
-            Pass(
-                n, name, board, sum(t["input"] for t in rows) - cached, cached, sum(t["output"] for t in rows)
-            )
-        )
-    return out
+        board, claims = Board.open(board_file), Claims.open(board_file.parent)
+        rows = [row for card in board.cards for row in claims.ledger(card.issue)]
+        cached = sum(row["cached"] for row in rows)
+        fresh = sum(row["input"] for row in rows) - cached
+        found.append(Pass(number, name, board, fresh, cached, sum(row["output"] for row in rows)))
+    return found
 
 
 def ladder(state: Path = STATE) -> None:
     print(paint(f"{'':<21} {'fresh in':>8} {'cached':>7} {'out':>6} {'per claim':>9} {'per 1,000':>9}", "1"))
-    for p in passes(state):
-        cost = "none" if p.per_claim is None else usd(p.per_claim)
-        print(f"{p.name:<21} {p.fresh:>8,} {p.cached:>7,} {p.output:>6,} {cost:>9} {p.per_thousand:>9}")
+    for result in passes(state):
+        cost = "none" if result.per_claim is None else usd(result.per_claim)
+        print(
+            f"{result.name:<21} {result.fresh:>8,} {result.cached:>7,} {result.output:>6,} "
+            f"{cost:>9} {result.per_thousand:>9}"
+        )
 
 
-def main() -> None:
-    p = argparse.ArgumentParser()
-    p.add_argument("--serve", action="store_true", help="serve the board from the last run")
-    p.add_argument("--port", type=int, default=8092)
-    a = p.parse_args()
-    if a.serve:
-        from claims.board import serve
+async def run_pass(root: Path, number: int, model: Model | str) -> None:
+    """Every pass starts from the same three claims, so the only difference between passes is the levers."""
+    name, levers = LADDER[number - 1]
+    print(paint(f"Pass {number}: {name}", "1;36"))
+    board = Board(root / f"pass-{number}" / "board.json", [replace(card, runs=[], log=[]) for card in SEED])
+    board.save()
+    claims = Claims.open(board.path.parent)
+    for card in board.cards:
+        await work(board, card, levers, model, show=print)
+        report(board, card, claims)
+    filed = sum(card.column == "Done" for card in board.cards)
+    cost = board.cost_per_outcome
+    print(
+        paint(f"{filed} of {len(SEED)} filed, {'none' if cost is None else usd(cost)} per claim filed", "1")
+    )
 
-        serve(STATE, TEAM, a.port)
-        return
-    asyncio.run(demo())
-    ladder()
 
-
-async def demo() -> None:
-    # Every pass starts from the same three claims, so the only difference between passes is the levers.
+async def run_passes() -> None:
     # One event loop and one client for every pass: a loop per card closed the client under its own calls.
     shutil.rmtree(STATE, ignore_errors=True)
     model = default_model()
-    for n, (name, levers) in enumerate(LADDER, 1):
-        print(paint(f"Pass {n}: {name}", "1;36"))
-        board = Board(STATE / f"pass-{n}" / "board.json", [replace(c, runs=[], log=[]) for c in SEED])
-        board.save()
-        for card in board.cards:
-            await work(board, card, levers, model)
-            report(board, card)
+    for number in range(1, len(LADDER) + 1):
+        await run_pass(STATE, number, model)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--serve", action="store_true", help="serve the board: the newest live pass")
+    parser.add_argument("--pass", dest="number", type=int, choices=range(1, len(LADDER) + 1))
+    parser.add_argument("--passes", action="store_true", help="run all four passes into the stored ladder")
+    parser.add_argument("--ladder", action="store_true", help="print the stored ladder; no model")
+    parser.add_argument("--port", type=int, default=8092)
+    args = parser.parse_args()
+    if args.serve:
+        from claims.board import Desk, serve
+
+        serve(Desk(STATE, LIVE), TEAM, args.port)
+    elif args.ladder:
+        ladder()
+    elif args.passes:
+        asyncio.run(run_passes())
+        ladder()
+    else:
+        number = args.number or len(LADDER)
+        shutil.rmtree(LIVE / f"pass-{number}", ignore_errors=True)
+        asyncio.run(run_pass(LIVE, number, default_model()))
 
 
 if __name__ == "__main__":

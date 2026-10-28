@@ -4,5 +4,5 @@
 [[step]]
 slug = "cut-ai-agent-costs-with-prompt-caching"
 session = "Lightning, Thu 12 Nov 2026"
-promise = "A claims reader reads three insurance claims from photos and repair quotes; with the policy cached, photos at low detail and reasoning at low effort, every call starts with the same policy and asks to think less, the hail claim that its budget stopped before is filed, and each claim's cost is the claims system's ledger of the provider's own token counts, cached tokens at the cached price."
+promise = "A claims reader reads three insurance claims from photos and repair quotes; with the policy cached, photos at low detail and reasoning at low effort, every call starts with the same policy and asks to think less, the hail claim that its budget stopped before is filed, and each claim's cost is the claims system's ledger of the provider's own token counts, cached tokens at the cached price; and only the adjuster, signed in on the board, can raise a claim's budget, after which that claim resumes from the document it stopped at."
 built = true

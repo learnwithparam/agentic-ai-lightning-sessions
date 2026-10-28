@@ -51,8 +51,9 @@ folder = "token-economics"
 built = true
 job = "An insurance claims agent reads accident photos and repair quotes into a claim file, then gets cheaper"
 truth = "The provider's own token counts for each claim, cached tokens included"
-screen = "The board's cost per claim before and after three levers, and a runaway claim stopped by its budget"
-sells = "Buildcamp last call before 16 Nov, where week 4 picks the cheapest model that passes"
+screen = "The board's cost per claim before and after three levers, and a runaway claim that waits for the adjuster to raise its budget"
+sells = "Buildcamp last call before 16 Nov, where the operate stage counts cost per outcome and picks the cheapest model that passes"
+readable = true
 
 [[session]]
 date = "2026-11-19"

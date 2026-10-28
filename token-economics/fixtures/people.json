@@ -1,0 +1,4 @@
+[
+  {"name": "Leo Grant", "role": "claims handler", "passphrase_env": "BOARD_PASSPHRASE_LEO_GRANT"},
+  {"name": "Nina Kowalski", "role": "adjuster", "passphrase_env": "BOARD_PASSPHRASE_NINA_KOWALSKI"}
+]

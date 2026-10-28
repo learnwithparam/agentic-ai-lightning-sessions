@@ -7,8 +7,9 @@ SHELL := /bin/bash
 RUN := PYTHONPATH=../mission-control uv run --quiet
 KEYS := --env-file ../mission-control/.env
 MODEL := WORKFORCE_MODEL=openai/gpt-6-luna WORKFORCE_PRICE_IN=0.10 WORKFORCE_PRICE_CACHED=0.01 WORKFORCE_PRICE_OUT=0.50
+PASS ?= 4
 
-.PHONY: help check demo board
+.PHONY: help check demo passes ladder board rehearse record
 
 help: ## List every target
 	@grep -E '^[a-z0-9-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[33m%-8s\033[0m %s\n", $$1, $$2}'
@@ -18,8 +19,21 @@ check: ## Lint, format, and the reader's acceptance tests (real claims system, a
 	uv run --quiet ruff format --check .
 	uv run --quiet pytest
 
-demo: ## Read the three claims four times, one more lever each pass, with a real model
-	@$(MODEL) $(RUN) $(KEYS) python -m claims.reader
+demo: ## Read the three claims once with the levers of one pass (make demo PASS=1 to 4), with a real model
+	@$(MODEL) $(RUN) $(KEYS) python -m claims.reader --pass $(PASS)
 
-board: ## Serve the board from the last make demo on http://127.0.0.1:8092
-	$(RUN) python -m claims.reader --serve
+passes: ## Read the three claims four times into the stored ladder, about 7 minutes; run before the call
+	@$(MODEL) $(RUN) $(KEYS) python -m claims.reader --passes
+
+ladder: ## Print the stored ladder, with no model and no keys
+	@$(RUN) python -m claims.reader --ladder
+
+board: ## Serve the signed-in board on http://127.0.0.1:8092; an approval reads the rest of the claim
+	$(MODEL) $(RUN) $(KEYS) python -m claims.reader --serve
+
+rehearse: ## Sign in as Leo and Nina on the running board and walk the hail claim to Done
+	$(RUN) $(KEYS) python rehearse.py
+
+DECK := ../../../internal-apps/lwp-deck
+record: ## Record a deck clip signed in to the board (make record CLIP=claims-approve); stop make board first
+	$(RUN) $(KEYS) bash -c 'cd $(DECK) && node scripts/record-screen.mjs cut-ai-agent-costs-with-token-economics $(CLIP)'

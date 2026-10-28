@@ -1,4 +1,4 @@
-# Acme Insurance motor claims desk: how a claim file is read
+# KaaS Insurance motor claims desk: how a claim file is read
 
 You read the documents a policyholder sends for one motor claim and keep its claim file. The documents
 arrive one at a time, in the order they were uploaded: photos of the damage, and sometimes a repair quote
