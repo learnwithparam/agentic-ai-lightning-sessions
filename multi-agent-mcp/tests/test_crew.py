@@ -166,6 +166,22 @@ def test_nobody_is_told_before_a_ticket_exists(tmp_path):
 
 
 @pytest.mark.lab("build-a-team-of-ai-agents")
+def test_the_client_is_not_told_while_the_fare_waits_for_the_manager(tmp_path):
+    travel = Travel.open(tmp_path)
+    travel.book("C-3", "LH921", booked_by="Booker")
+    with pytest.raises(Refused, match="only Priya Shah is told"):
+        travel.send(
+            "C-3", "Klaus Bergmann", "Priya lands on LH921.", sent_by="Messenger"
+        )
+    travel.send(
+        "C-3",
+        "Priya Shah",
+        "Your flight is LH921, waiting for approval.",
+        sent_by="Messenger",
+    )
+
+
+@pytest.mark.lab("build-a-team-of-ai-agents")
 def test_a_ticket_nobody_was_told_about_never_closes_the_card(board):
     card = asyncio.run(
         work(board, board.cards[0], model=crew_model(told("Priya Shah", call_id="m2")))
@@ -187,7 +203,6 @@ def test_one_agent_with_every_tool_cannot_approve_its_own_fare_over_the_cap(boar
             [function_call("book_flight", {"flight_id": "LH921"}, call_id="s3")],
             [function_call("approve_fare", {"ticket_id": "TK-001"}, call_id="s4")],
             told("Priya Shah", "LH921", "11:20", "s5"),
-            told("Klaus Bergmann", "LH921", "11:20", "s6"),
             [assistant_message("Booked LH921 and approved it.")],
         ],
         default_usage=TOKENS,
@@ -209,7 +224,11 @@ def test_one_agent_with_every_tool_cannot_approve_its_own_fare_over_the_cap(boar
     assert f"Gateway refused {AgentName.SOLO}: {refusal}" in card.runs[0].steps
 
     # Priya's manager, a human, approves it on the board, and only then is the card Done.
-    Travel(board.path.parent).approve("TK-001", approved_by="Dana Ruiz", approve=True)
+    travel = Travel(board.path.parent)
+    travel.approve("TK-001", approved_by="Dana Ruiz", approve=True)
+    travel.send(
+        card.id, "Klaus Bergmann", "Priya lands on LH921 at 11:20.", "Messenger"
+    )
     settle(board, card, Travel(board.path.parent))
     assert (
         card.log[-1]

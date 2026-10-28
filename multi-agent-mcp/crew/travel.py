@@ -164,8 +164,14 @@ class Travel:
         data = self._read()
         if recipient not in data["trip"]["contacts"]:
             raise Refused(f"{recipient} is not a contact on {data['trip']['id']}")
-        if self.ticket(card) is None:
+        ticket = self.ticket(card)
+        if ticket is None:
             raise Refused("there is no ticket yet, so there is nothing to tell anyone")
+        trip = data["trip"]
+        if ticket["status"] != TicketStatus.TICKETED and recipient != trip["traveller"]:
+            raise Refused(
+                f"the fare waits for {trip['manager']}, so only {trip['traveller']} is told"
+            )
         message = {
             "card": card,
             "to": recipient,
