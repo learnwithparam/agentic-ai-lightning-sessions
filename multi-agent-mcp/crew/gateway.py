@@ -1,147 +1,212 @@
-"""The MCP gateway every AI employee reaches Acme's travel system through.
+"""The MCP gateway every AI agent reaches KaaS Travel's travel system through.
 
-One gateway process runs per employee and knows who it serves from how it was started, never from what
-the model says. It lists only that employee's tools, refuses any other call, and writes every call,
-allowed or refused, to the card's call log. The travel system's own refusals land in the same log.
+One gateway process runs per agent. It knows who it serves from how it was started, never from what the
+model says. It lists only that agent's tools, refuses any other call, and writes every call, allowed or
+refused, to the card's call log. The travel system's own refusals land in the same log.
 """
 
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import time
+from collections.abc import Callable
+from enum import StrEnum
 from pathlib import Path
 
 from mcp.server.mcpserver import MCPServer
 
 from crew.travel import Refused, Travel
 
-PLANNER, BOOKER, MESSENGER, SOLO = "Trip planner", "Booker", "Messenger", "Solo agent"
-# What each employee may call. The solo agent exists to show what one agent with every tool can do, so it
-# also holds approve_fare, which no employee on the crew has.
-SCOPES = {
-    PLANNER: ("read_trip", "search_flights"),
-    BOOKER: ("read_trip", "book_flight"),
-    MESSENGER: ("read_trip", "read_ticket", "send_message"),
+ARGUMENT_MAX_CHARACTERS = 80
+SAID_MAX_CHARACTERS = 160
+
+
+class AgentName(StrEnum):
+    TRIP_PLANNER = "Trip planner"
+    BOOKER = "Booker"
+    MESSENGER = "Messenger"
+    SOLO = "Solo agent"
+
+
+# The solo agent exists to show what one agent with every tool can do, so it also holds approve_fare,
+# which no agent on the crew has.
+TOOLS_EACH_AGENT_MAY_CALL = {
+    AgentName.TRIP_PLANNER: ("read_trip", "search_flights"),
+    AgentName.BOOKER: ("read_trip", "book_flight"),
+    AgentName.MESSENGER: ("read_trip", "read_ticket", "send_message"),
+    AgentName.SOLO: (
+        "read_trip",
+        "search_flights",
+        "book_flight",
+        "read_ticket",
+        "send_message",
+        "approve_fare",
+    ),
 }
-SCOPES[SOLO] = (*dict.fromkeys(t for tools in SCOPES.values() for t in tools), "approve_fare")
-AGENTS = frozenset(SCOPES)
+
+
+def write_call_log_row(
+    call_log: Path,
+    card: str,
+    who: str,
+    tool: str,
+    arguments: dict,
+    allowed: bool,
+    said: str,
+) -> None:
+    """One line per call. People acting on the board write here too, so one log tells the whole story."""
+    row = {
+        "at": time.time(),
+        "card": card,
+        "agent": who,
+        "tool": tool,
+        "args": {
+            name: str(value)[:ARGUMENT_MAX_CHARACTERS]
+            for name, value in arguments.items()
+        },
+        "allowed": allowed,
+        "said": said[:SAID_MAX_CHARACTERS],
+    }
+    with call_log.open("a") as log_file:
+        log_file.write(json.dumps(row) + "\n")
 
 
 class Gateway(MCPServer):
-    def __init__(self, agent: str, state: Path, card: str) -> None:
-        super().__init__(name="acme-travel", instructions=f"Acme's travel system, as {agent}")
-        self.agent, self.card, self.travel = agent, card, Travel.open(state)
-        self.calls = state / "calls.jsonl"
-        tools(self)
+    def __init__(self, agent: AgentName, state: Path, card: str) -> None:
+        super().__init__(
+            name="kaas-travel", instructions=f"KaaS Travel's travel system, as {agent}"
+        )
+        self.agent = agent
+        self.card = card
+        self.travel = Travel.open(state)
+        self.call_log = state / "calls.jsonl"
+        register_travel_tools(self)
 
     async def list_tools(self):
-        return [t for t in await super().list_tools() if t.name in SCOPES[self.agent]]
+        allowed_names = TOOLS_EACH_AGENT_MAY_CALL[self.agent]
+        return [
+            tool for tool in await super().list_tools() if tool.name in allowed_names
+        ]
 
-    def log(self, tool: str, args: dict, allowed: bool, said: str) -> None:
-        row = {"at": time.time(), "card": self.card, "agent": self.agent, "tool": tool}
-        row |= {"args": {k: str(v)[:80] for k, v in args.items()}, "allowed": allowed, "said": said[:160]}
-        with self.calls.open("a") as f:
-            f.write(json.dumps(row) + "\n")
-
-    def allow(self, tool: str, args: dict) -> str | None:
-        """None when the call may go ahead; else the refusal, already in the log."""
-        if tool not in SCOPES[self.agent]:
-            said = f"Refused: {self.agent} may not call {tool}"
-            self.log(tool, args, False, said)
-            return said
-        return None
-
-
-def calls(state: Path, card: str | None = None) -> list[dict]:
-    f = state / "calls.jsonl"
-    rows = [json.loads(line) for line in f.read_text().splitlines()] if f.exists() else []
-    return [r for r in rows if card is None or r["card"] == card]
-
-
-def flight_line(f: dict) -> str:
-    return f"{f['id']} {f['departs']} to {f['lands']}, {f['cabin']}, £{f['fare']}, {f['seats']} seats"
-
-
-def tools(g: Gateway) -> None:
-    def done(tool: str, args: dict, said: str, allowed: bool = True) -> str:
-        g.log(tool, args, allowed, said)
-        return said
-
-    def guarded(tool: str, args: dict, act) -> str:
-        if refused := g.allow(tool, args):
-            return refused
-        try:
-            return done(tool, args, act())
-        except Refused as e:
-            return done(tool, args, f"Refused: {e}", allowed=False)
-
-    @g.tool()
-    def read_trip() -> str:
-        """Read the trip: the traveller, the cancelled flight, the meeting, the fare cap and the contacts."""
-
-        def act() -> str:
-            t = g.travel.trip()
-            return (
-                f"{t['id']} for {t['traveller']}: {t['cancelled']} was cancelled.\n"
-                f"Meeting {t['date']} at {t['meeting']} with {t['meeting_with']}. Hotel: {t['hotel']}.\n"
-                f"Fare cap £{t['fare_cap']}; over it waits for {t['manager']}. "
-                f"Contacts: {', '.join(t['contacts'])}."
-            )
-
-        return guarded("read_trip", {}, act)
-
-    @g.tool()
-    def search_flights() -> str:
-        """List the flights on the trip's route and day, with times, cabin, fare and seats left."""
-        return guarded("search_flights", {}, lambda: "\n".join(map(flight_line, g.travel.flights())))
-
-    @g.tool()
-    def book_flight(flight_id: str) -> str:
-        """Book a seat on one flight for this card's trip. The travel system checks the rules."""
-
-        def act() -> str:
-            t = g.travel.book(g.card, flight_id, g.agent)
-            return f"{t['id']} on {t['flight']}, lands {t['lands']}, £{t['fare']}: {t['status']}"
-
-        return guarded("book_flight", {"flight_id": flight_id}, act)
-
-    @g.tool()
-    def read_ticket() -> str:
-        """Read this card's ticket as the travel system holds it."""
-
-        def act() -> str:
-            t = g.travel.ticket(g.card)
-            if t is None:
-                return "No ticket yet."
-            return f"{t['id']} on {t['flight']}, departs {t['departs']}, lands {t['lands']}: {t['status']}"
-
-        return guarded("read_ticket", {}, act)
-
-    @g.tool()
-    def send_message(to: str, body: str) -> str:
-        """Send a short message to one contact on the trip."""
-        return guarded(
-            "send_message",
-            {"to": to, "body": body},
-            lambda: f"Sent to {g.travel.send(g.card, to, body, g.agent)['to']}",
+    def log_call(self, tool: str, arguments: dict, allowed: bool, said: str) -> None:
+        write_call_log_row(
+            self.call_log, self.card, self.agent, tool, arguments, allowed, said
         )
 
-    @g.tool()
+    def run_if_allowed(
+        self, tool: str, arguments: dict, action: Callable[[], str]
+    ) -> str:
+        """Run the tool only when this agent may call it; log the call and return what the model sees."""
+        if tool not in TOOLS_EACH_AGENT_MAY_CALL[self.agent]:
+            reason = f"{self.agent} may not call {tool}"
+            self.log_call(tool, arguments, allowed=False, said=reason)
+            return f"Refused: {reason}"
+        try:
+            said = action()
+        except Refused as refusal_by_the_travel_system:
+            self.log_call(
+                tool, arguments, allowed=False, said=str(refusal_by_the_travel_system)
+            )
+            return f"Refused: {refusal_by_the_travel_system}"
+        self.log_call(tool, arguments, allowed=True, said=said)
+        return said
+
+
+def read_call_log(state: Path, card: str | None = None) -> list[dict]:
+    call_log = state / "calls.jsonl"
+    if not call_log.exists():
+        return []
+    rows = [json.loads(line) for line in call_log.read_text().splitlines()]
+    return [row for row in rows if card is None or row["card"] == card]
+
+
+def describe_flight(flight: dict) -> str:
+    return (
+        f"{flight['id']} {flight['departs']} to {flight['lands']}, {flight['cabin']}, "
+        f"£{flight['fare']}, {flight['seats']} seats"
+    )
+
+
+def scoped_tool(gateway: Gateway):
+    """Register a function as an MCP tool whose every call goes through the gateway's scope check."""
+
+    def register(action):
+        @functools.wraps(action)
+        def checked_call(**arguments) -> str:
+            return gateway.run_if_allowed(
+                action.__name__, arguments, lambda: action(**arguments)
+            )
+
+        return gateway.tool()(checked_call)
+
+    return register
+
+
+def register_travel_tools(gateway: Gateway) -> None:
+    travel = gateway.travel
+
+    @scoped_tool(gateway)
+    def read_trip() -> str:
+        """Read the trip: the traveller, the cancelled flight, the meeting, the fare cap and the contacts."""
+        trip = travel.trip()
+        return (
+            f"{trip['id']} for {trip['traveller']}: {trip['cancelled']} was cancelled.\n"
+            f"Meeting {trip['date']} at {trip['meeting']} with {trip['meeting_with']}. "
+            f"Hotel: {trip['hotel']}.\n"
+            f"Fare cap £{trip['fare_cap']}; over it waits for {trip['manager']}. "
+            f"Contacts: {', '.join(trip['contacts'])}."
+        )
+
+    @scoped_tool(gateway)
+    def search_flights() -> str:
+        """List the flights on the trip's route and day, with times, cabin, fare and seats left."""
+        return "\n".join(describe_flight(flight) for flight in travel.flights())
+
+    @scoped_tool(gateway)
+    def book_flight(flight_id: str) -> str:
+        """Book a seat on one flight for this card's trip. The travel system checks the rules."""
+        ticket = travel.book(gateway.card, flight_id, booked_by=gateway.agent)
+        return (
+            f"{ticket['id']} on {ticket['flight']}, lands {ticket['lands']}, "
+            f"£{ticket['fare']}: {ticket['status']}"
+        )
+
+    @scoped_tool(gateway)
+    def read_ticket() -> str:
+        """Read this card's ticket as the travel system holds it."""
+        ticket = travel.ticket(gateway.card)
+        if ticket is None:
+            return "No ticket yet."
+        return (
+            f"{ticket['id']} on {ticket['flight']}, departs {ticket['departs']}, "
+            f"lands {ticket['lands']}: {ticket['status']}"
+        )
+
+    @scoped_tool(gateway)
+    def send_message(recipient: str, body: str) -> str:
+        """Send a short message to one contact on the trip."""
+        message = travel.send(gateway.card, recipient, body, sent_by=gateway.agent)
+        return f"Sent to {message['to']}"
+
+    @scoped_tool(gateway)
     def approve_fare(ticket_id: str) -> str:
         """Approve a fare over the trip's cap."""
+        ticket = travel.approve(ticket_id, approved_by=gateway.agent, approve=True)
+        return f"{ticket['id']} {ticket['status']}"
 
-        def act() -> str:
-            t = g.travel.approve(ticket_id, g.agent, True, AGENTS)
-            return f"{t['id']} {t['status']}"
 
-        return guarded("approve_fare", {"ticket_id": ticket_id}, act)
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--as", dest="agent", type=AgentName, choices=list(AgentName), required=True
+    )
+    parser.add_argument("--state", type=Path, required=True)
+    parser.add_argument("--card", required=True)
+    args = parser.parse_args()
+    Gateway(args.agent, args.state, args.card).run("stdio")
 
 
 if __name__ == "__main__":
-    p = argparse.ArgumentParser()
-    p.add_argument("--as", dest="agent", choices=list(SCOPES), required=True)
-    p.add_argument("--state", type=Path, required=True)
-    p.add_argument("--card", required=True)
-    a = p.parse_args()
-    Gateway(a.agent, a.state, a.card).run("stdio")
+    main()

@@ -3,3 +3,11 @@
 .receipt.trip.open h4{color:var(--wait-ink)}
 .tbl.calls tr.no td{background:var(--fail-bg)}
 .tbl.calls td.args{color:var(--muted);max-width:28ch;overflow-wrap:anywhere}
+/* Sign-in: who is on the board, and the Approve and Decline buttons on a held fare. */
+.signed-in{font-size:13px;color:var(--muted)}.signed-in b{color:var(--ink);font-weight:500}
+.sign-out{margin:0}.sign-out button{font-size:13px;padding:4px 10px}
+main.login{max-width:360px;margin:12vh auto;padding:0 16px}
+main.login form{display:grid;gap:14px}main.login label{display:grid;gap:6px;font-size:14px}
+main.login select,main.login input{font:inherit;padding:8px 10px}
+main.login button,form.decide button{font:inherit;font-size:15px;padding:8px 16px;cursor:pointer}
+form.decide{margin:16px 0 0}form.decide button.ghost{background:none}

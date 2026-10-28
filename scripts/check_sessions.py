@@ -2,14 +2,47 @@
 or not built and has no folder yet. Every folder with a Makefile is a listed session, so a demo cannot
 ship in this repo without a row a reader can find. Every row names the board job, the truth outside the
 model, the screen the room watches and what it sells, so no session is planned as code on slides.
-AGENTS.md is the one brief every agent reads, and CLAUDE.md only imports it, so the two cannot drift."""
+AGENTS.md is the one brief every agent reads, and CLAUDE.md only imports it, so the two cannot drift.
+A session marked `readable = true` also reads like English on screen: names of three letters or more, no
+unpacked triples, no walrus, no log line parsed back with removeprefix."""
 
+import ast
 import sys
 import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 PLAN = ("job", "truth", "screen", "sells")
+MIN_NAME_LENGTH = 3
+
+
+def hard_to_read(source_file: Path, folder: str) -> list[str]:
+    where = f"{folder}/{source_file.relative_to(ROOT / folder)}"
+    found = []
+    for node in ast.walk(ast.parse(source_file.read_text())):
+        line = f"{where}:{getattr(node, 'lineno', 0)}"
+        names = []
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+            names = [node.id]
+        elif isinstance(node, ast.arg):
+            names = [node.arg]
+        elif isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            names = [node.name]
+        found += [
+            f"{line}: the name {name!r} is too short to read; use {MIN_NAME_LENGTH}+ letters"
+            for name in names
+            if len(name) < MIN_NAME_LENGTH and name != "_"
+        ]
+        if isinstance(node, ast.NamedExpr):
+            found.append(f"{line}: a walrus hides a step; assign on its own line")
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Tuple) and len(target.elts) >= 3 for target in node.targets
+        ):
+            found.append(f"{line}: unpacking three or more values at once; name each on its own line")
+        is_removeprefix = isinstance(node, ast.Attribute) and node.attr == "removeprefix"
+        if is_removeprefix:
+            found.append(f"{line}: removeprefix parses a string back; keep a record with fields instead")
+    return found
 
 
 def problems() -> list[str]:
@@ -25,6 +58,10 @@ def problems() -> list[str]:
         if not (d / "Makefile").exists():
             out.append(f"{s['folder']}: built but has no Makefile")
             continue
+        if s.get("readable"):
+            for source_file in sorted(d.rglob("*.py")):
+                if ".venv" not in source_file.parts:
+                    out += hard_to_read(source_file, s["folder"])
         steps = tomllib.loads((d / "steps.toml").read_text())["step"] if (d / "steps.toml").exists() else []
         if not any(st["slug"] == s["slug"] and st["built"] for st in steps):
             out.append(f"{s['folder']}: steps.toml does not mark {s['slug']} built")

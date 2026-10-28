@@ -1,0 +1,5 @@
+[
+  {"name": "Priya Shah", "role": "traveller", "passphrase_env": "BOARD_PASSPHRASE_PRIYA"},
+  {"name": "Dana Ruiz", "role": "manager", "passphrase_env": "BOARD_PASSPHRASE_DANA"},
+  {"name": "Sam Okafor", "role": "travel desk", "passphrase_env": "BOARD_PASSPHRASE_SAM"}
+]

@@ -202,7 +202,7 @@ def card_html(c: Card, replied: dict | None) -> str:
     return body
 
 
-def page(title: str, live: str, here: str) -> str:
+def page(title: str, live: str, here: str, workspace: str = "Acme", signed_in: str = "") -> str:
     links = "".join(
         f'<a href="{href}"{" aria-current=page" if name == here else ""}>{name}</a>'
         for name, href in (("Board", "/"), ("Team", "/team"), ("Activity", "/#activity"))
@@ -211,7 +211,7 @@ def page(title: str, live: str, here: str) -> str:
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>{E(title)}</title>
 <link rel="stylesheet" href="/static/base.css"><link rel="stylesheet" href="/static/board.css"></head><body>
 <nav class="top"><a class="brand" href="/">{MARK}Mission Control</a>{links}<span class="grow"></span>
-<span class="tenant">Workspace <b>Acme</b></span></nav>
+<span class="tenant">Workspace <b>{E(workspace)}</b></span>{signed_in}</nav>
 <div id="live">{live}</div>
 <script>setInterval(async()=>{{try{{const t=await (await fetch(location.pathname)).text();
 const n=new DOMParser().parseFromString(t,"text/html").getElementById("live");
@@ -224,7 +224,7 @@ if(n&&n.innerHTML!==o.innerHTML&&!document.querySelector(".decide:hover"))o.repl
 Replies = dict[str, dict]
 
 
-def render(board: Board, replies: Replies | None = None) -> str:
+def render(board: Board, replies: Replies | None = None, workspace: str = "Acme", signed_in: str = "") -> str:
     replies = replies or {}
     lanes = ""
     for name in COLUMNS:
@@ -259,10 +259,10 @@ def render(board: Board, replies: Replies | None = None) -> str:
 <table class="tbl"><thead><tr><th>Card</th><th>Employee</th><th class="n hide">Tokens in</th>
 <th class="n hide">Tokens out</th><th class="n">Cost</th><th>Result</th><th class="hide">Said</th>
 </tr></thead><tbody>{log}</tbody></table></div>"""
-    return page("Mission Control", live, "Board")
+    return page("Mission Control", live, "Board", workspace, signed_in)
 
 
-def detail(c: Card, replied: dict | None) -> str:
+def detail(c: Card, replied: dict | None, workspace: str = "Acme", signed_in: str = "") -> str:
     """One card: where it stands, every run with its steps and cost, and what closed it."""
     runs = (
         "".join(
@@ -292,10 +292,10 @@ def detail(c: Card, replied: dict | None) -> str:
 <div class="stat"><span>Cost</span><b>{usd(c.cost)}</b><em>failed runs included</em></div></div>
 {closed}<h2 class="sec">Runs</h2><ol class="runs">{runs}</ol>
 <h2 class="sec">Timeline</h2><ol class="timeline">{timeline}</ol></div>"""
-    return page(c.title, live, "")
+    return page(c.title, live, "", workspace, signed_in)
 
 
-def team(board: Board, roster: tuple[Role, ...]) -> str:
+def team(board: Board, roster: tuple[Role, ...], workspace: str = "Acme", signed_in: str = "") -> str:
     """Every AI employee: what it is hired for, what it must never do, and what its outcomes cost."""
     rows = ""
     for r in roster:
@@ -315,7 +315,7 @@ def team(board: Board, roster: tuple[Role, ...]) -> str:
     live = f"""<div class="wrap tight"><div class="head"><div><h1 class="page">Team</h1>
 <p>Each AI employee is hired for one outcome and has one thing it must never do. A test holds each line.</p>
 </div></div><div class="roster">{rows}</div></div>"""
-    return page("Team", live, "Team")
+    return page("Team", live, "Team", workspace, signed_in)
 
 
 def app(state: Path, roster: tuple[Role, ...]) -> web.Application:

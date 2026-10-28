@@ -21,5 +21,5 @@ demo: ## The trip planner, booker and messenger rebook Priya's cancelled flight 
 solo: ## One agent with every tool works the same card, for comparison
 	$(RUN) $(KEYS) python -m crew.team --solo
 
-board: ## Serve the board from the last make demo on http://127.0.0.1:8090
-	$(RUN) python -m crew.team --serve
+board: ## Serve the signed-in board on http://127.0.0.1:8090 (make board SOLO=1 for the solo run)
+	$(RUN) $(KEYS) python -m crew.team --serve $(if $(SOLO),--solo)

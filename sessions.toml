@@ -25,6 +25,7 @@ slug = "build-a-team-of-ai-agents"
 title = "Build a Multi-Agent System with MCP"
 folder = "multi-agent-mcp"
 built = true
+readable = true
 job = "Priya's cancelled flight to a client meeting goes to a trip planner, a booker and a messenger, each scoped by an MCP gateway"
 truth = "The travel system holds a ticket that lands in time and both contacts were sent its flight; a fare over the cap waits for her manager"
 screen = "The card page with each hand-off, the gateway's call log with its refusals, then the ticket"

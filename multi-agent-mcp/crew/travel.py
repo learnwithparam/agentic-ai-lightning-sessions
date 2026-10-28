@@ -1,10 +1,10 @@
-"""Acme's travel system: the trip, the flights on sale, the tickets and the messages sent. The truth a card
-settles on.
+"""KaaS Travel's travel system: the trip, the flights on sale, the tickets and the messages sent.
+It is the truth a card settles on.
 
-The travel rules live here, so no prompt can move them. A ticket is only for the trip's route and day, on
-a flight with a seat that lands at least 90 minutes before the meeting. A fare over the trip's cap waits
-for the traveller's manager, and no AI employee can approve it. A message goes only to a contact on the
-trip. A flight is booked only when this system says so.
+The travel rules live here, so no prompt can move them. A ticket is only for the trip's route and day,
+on a flight with a seat that lands at least 90 minutes before the meeting. A fare over the trip's cap
+waits for the traveller's manager, and only that manager can approve it. A message goes only to a
+contact on the trip. A flight is booked only when this system says so.
 """
 
 from __future__ import annotations
@@ -12,19 +12,28 @@ from __future__ import annotations
 import json
 import shutil
 from dataclasses import dataclass
+from datetime import datetime
+from enum import StrEnum
 from pathlib import Path
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
-TO_THE_MEETING = 90  # minutes from landing at BER to a desk in Berlin Mitte
+MINUTES_FROM_LANDING_TO_THE_MEETING = 90  # landing at BER to a desk in Berlin Mitte
+MESSAGE_MAX_CHARACTERS = 500
+
+
+class TicketStatus(StrEnum):
+    TICKETED = "ticketed"
+    WAITING_FOR_MANAGER = "waiting for the manager"
+    DECLINED = "declined"
 
 
 class Refused(Exception):
     pass
 
 
-def minutes(hhmm: str) -> int:
-    h, m = hhmm.split(":")
-    return int(h) * 60 + int(m)
+def minutes_after_midnight(clock_time: str) -> int:
+    hours, minutes = clock_time.split(":")
+    return int(hours) * 60 + int(minutes)
 
 
 @dataclass
@@ -48,35 +57,63 @@ class Travel:
         return self._read()["trip"]
 
     def flights(self) -> list[dict]:
-        trip, data = self.trip(), self._read()
+        data = self._read()
+        trip = data["trip"]
+        route_and_day = (trip["from"], trip["to"], trip["date"])
         return [
-            f
-            for f in data["flights"]
-            if (f["from"], f["to"], f["date"]) == (trip["from"], trip["to"], trip["date"])
+            flight
+            for flight in data["flights"]
+            if (flight["from"], flight["to"], flight["date"]) == route_and_day
         ]
 
+    def mark_full(self, flight_id: str) -> None:
+        """Sell out one flight, so the room can watch the crew cope with it."""
+        data = self._read()
+        next(flight for flight in data["flights"] if flight["id"] == flight_id)[
+            "seats"
+        ] = 0
+        self._write(data)
+
     def ticket(self, card: str) -> dict | None:
-        live = [t for t in self._read()["tickets"] if t["card"] == card and t["status"] != "declined"]
+        tickets = self._read()["tickets"]
+        live = [
+            ticket
+            for ticket in tickets
+            if ticket["card"] == card and ticket["status"] != TicketStatus.DECLINED
+        ]
         return live[-1] if live else None
 
     def messages(self, card: str) -> list[dict]:
-        return [m for m in self._read()["messages"] if m["card"] == card]
+        return [
+            message for message in self._read()["messages"] if message["card"] == card
+        ]
 
-    def book(self, card: str, flight_id: str, by: str) -> dict:
+    def book(self, card: str, flight_id: str, booked_by: str) -> dict:
         data = self._read()
         trip = data["trip"]
-        flight = next((f for f in self.flights() if f["id"] == flight_id), None)
+        flight = next(
+            (each for each in self.flights() if each["id"] == flight_id), None
+        )
         if flight is None:
             raise Refused(
                 f"{flight_id} is not a flight from {trip['from']} to {trip['to']} on {trip['date']}"
             )
         if flight["seats"] < 1:
             raise Refused(f"{flight_id} is full")
-        if minutes(flight["lands"]) + TO_THE_MEETING > minutes(trip["meeting"]):
-            raise Refused(f"{flight_id} lands {flight['lands']}, too late for the {trip['meeting']} meeting")
+        lands_at = minutes_after_midnight(flight["lands"])
+        meeting_at = minutes_after_midnight(trip["meeting"])
+        if lands_at + MINUTES_FROM_LANDING_TO_THE_MEETING > meeting_at:
+            raise Refused(
+                f"{flight_id} lands {flight['lands']}, too late for the {trip['meeting']} meeting"
+            )
         if self.ticket(card):
             raise Refused(f"{card} already has a ticket")
-        held = flight["fare"] > trip["fare_cap"]
+        fare_is_over_the_cap = flight["fare"] > trip["fare_cap"]
+        status = (
+            TicketStatus.WAITING_FOR_MANAGER
+            if fare_is_over_the_cap
+            else TicketStatus.TICKETED
+        )
         ticket = {
             "id": f"TK-{len(data['tickets']) + 1:03d}",
             "card": card,
@@ -85,34 +122,47 @@ class Travel:
             "lands": flight["lands"],
             "cabin": flight["cabin"],
             "fare": flight["fare"],
-            "booked_by": by,
-            "status": f"waiting for {trip['manager']}" if held else "ticketed",
+            "booked_by": booked_by,
+            "status": status,
             "approved_by": None,
+            "approved_at": None,
         }
-        next(f for f in data["flights"] if f["id"] == flight_id)["seats"] -= 1
+        next(each for each in data["flights"] if each["id"] == flight_id)["seats"] -= 1
         data["tickets"].append(ticket)
         self._write(data)
         return ticket
 
-    def approve(self, ticket_id: str, by: str, yes: bool, agents: frozenset[str]) -> dict:
-        """Only the traveller's manager, a human, settles a fare over the cap."""
+    def approve(self, ticket_id: str, *, approved_by: str, approve: bool) -> dict:
+        """Only the traveller's manager, a signed-in human, settles a fare over the cap."""
         data = self._read()
-        ticket = next((t for t in data["tickets"] if t["id"] == ticket_id), None)
+        manager = data["trip"]["manager"]
+        ticket = next(
+            (each for each in data["tickets"] if each["id"] == ticket_id), None
+        )
         if ticket is None:
             raise Refused(f"there is no ticket {ticket_id}")
-        if not ticket["status"].startswith("waiting"):
+        if ticket["status"] != TicketStatus.WAITING_FOR_MANAGER:
             raise Refused(f"{ticket_id} is already {ticket['status']}")
-        if by in agents or by != data["trip"]["manager"]:
-            raise Refused(f"{by} may not approve a fare over the cap; only {data['trip']['manager']} can")
-        ticket["status"], ticket["approved_by"] = ("ticketed" if yes else "declined"), by
+        if approved_by != manager:
+            raise Refused(
+                f"{approved_by} may not approve a fare over the cap; only {manager} can"
+            )
+        ticket["status"] = TicketStatus.TICKETED if approve else TicketStatus.DECLINED
+        ticket["approved_by"] = approved_by
+        ticket["approved_at"] = datetime.now().strftime("%H:%M")
         self._write(data)
         return ticket
 
-    def send(self, card: str, to: str, body: str, by: str) -> dict:
+    def send(self, card: str, recipient: str, body: str, sent_by: str) -> dict:
         data = self._read()
-        if to not in data["trip"]["contacts"]:
-            raise Refused(f"{to} is not a contact on {data['trip']['id']}")
-        message = {"card": card, "to": to, "body": body.strip()[:500], "by": by}
+        if recipient not in data["trip"]["contacts"]:
+            raise Refused(f"{recipient} is not a contact on {data['trip']['id']}")
+        message = {
+            "card": card,
+            "to": recipient,
+            "body": body.strip()[:MESSAGE_MAX_CHARACTERS],
+            "by": sent_by,
+        }
         data["messages"].append(message)
         self._write(data)
         return message
@@ -122,4 +172,10 @@ class Travel:
         ticket = self.ticket(card)
         if ticket is None:
             return []
-        return sorted({m["to"] for m in self.messages(card) if ticket["flight"] in m["body"]})
+        return sorted(
+            {
+                message["to"]
+                for message in self.messages(card)
+                if ticket["flight"] in message["body"]
+            }
+        )
