@@ -15,8 +15,8 @@ check: ## Lint, format, and the crew's acceptance tests (real gateways, a script
 	uv run --quiet ruff format --check .
 	uv run --quiet pytest
 
-demo: ## The trip planner, booker and messenger rebook Priya's cancelled flight with a real model
-	$(RUN) $(KEYS) python -m crew.team
+demo: ## The crew rebooks Priya's cancelled flight with a real model (make demo SOLD_OUT=EW461 sells that flight out first)
+	$(RUN) $(KEYS) python -m crew.team $(if $(SOLD_OUT),--sold-out $(SOLD_OUT))
 
 solo: ## One agent with every tool works the same card, for comparison
 	$(RUN) $(KEYS) python -m crew.team --solo
