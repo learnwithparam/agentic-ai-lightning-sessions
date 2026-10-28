@@ -37,10 +37,11 @@ slug = "add-auth-and-guardrails-to-ai-agents"
 title = "Secure AI Agents with Guardrails"
 folder = "guardrails"
 built = true
+readable = true
 job = "A recruiting agent shortlists CVs for a role, and one CV hides an instruction to rank its owner first"
 truth = "The model never reads the hidden line, the hiring system refuses the flagged candidate and private fields, and its audit log shows each block"
-screen = "The board holding the planted CV in Needs you for a recruiter, and a request that screens by age stopped at no cost"
-sells = "Buildcamp week 4 guardrails, and the Deploy workshop for identity per agent"
+screen = "KaaS Retail's board holding the planted CV in Needs you, the hiring manager refused, and the recruiter signing in to decide"
+sells = "The Agentic AI Buildcamp, where guardrails and identity are part of the deploy stage"
 
 [[session]]
 date = "2026-11-12"

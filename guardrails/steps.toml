@@ -4,5 +4,5 @@
 [[step]]
 slug = "add-auth-and-guardrails-to-ai-agents"
 session = "Lightning, Thu 5 Nov 2026"
-promise = "A screener shortlists payroll applicants; the CV that hides an instruction in white text never reaches the model, the hiring system refuses a candidate's private fields, a request to screen by age stops before the model is called, and every block is in the hiring system's audit log."
+promise = "A screener shortlists payroll applicants; the CV that hides an instruction in white text never reaches the model, the hiring system refuses a candidate's private fields, a request to screen by age stops before the model is called, and every block is in the hiring system's audit log, and only the recruiter, signed in on the board, can reject or clear the flagged CV."
 built = true

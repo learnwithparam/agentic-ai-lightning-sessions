@@ -1,8 +1,9 @@
-"""Acme's hiring system, the record the board settles on: roles, applicants, CVs, shortlists, audit log.
+"""KaaS Retail's hiring system, the record the board settles on: roles, CVs, shortlists, audit log.
 
 Its rules are code, so no CV or prompt can move them. A candidate's date of birth, nationality and home
 address are never handed to the screener. A shortlist must be the size the role asks for, from people
-who applied, and holds nobody whose CV is flagged and not yet cleared by a recruiter.
+who applied, and holds nobody whose CV is flagged and not yet cleared by the recruiter. Only the
+recruiter reviews a flagged CV, and a refused review is in the audit log.
 """
 
 from __future__ import annotations
@@ -28,87 +29,108 @@ class ATS:
 
     @classmethod
     def open(cls, state: Path) -> ATS:
-        db = state / "ats.json"
-        if is_blank(db):
+        database = state / "ats.json"
+        if is_blank(database):
             state.mkdir(parents=True, exist_ok=True)
-            shutil.copy(FIXTURES / "ats.json", db)
+            shutil.copy(FIXTURES / "ats.json", database)
         return cls(state)
 
     def _read(self) -> dict:
         return json.loads((self.state / "ats.json").read_text())
 
-    def _write(self, db: dict) -> None:
-        (self.state / "ats.json").write_text(json.dumps(db, indent=1, ensure_ascii=False))
+    def _write(self, data: dict) -> None:
+        (self.state / "ats.json").write_text(json.dumps(data, indent=1, ensure_ascii=False))
 
     @property
     def recruiter(self) -> str:
         return self._read()["recruiter"]
 
-    def role(self, req: str) -> dict:
-        return self._read()["roles"][req]
+    def role(self, requisition: str) -> dict:
+        return self._read()["roles"][requisition]
 
-    def candidate(self, cid: str) -> dict:
-        c = self._read()["candidates"][cid]
-        return {"id": cid, "name": c["name"]}
+    def candidate(self, candidate_id: str) -> dict:
+        record = self._read()["candidates"][candidate_id]
+        return {"id": candidate_id, "name": record["name"]}
 
-    def cv(self, cid: str) -> str:
-        return (FIXTURES / "cvs" / self._read()["candidates"][cid]["cv"]).read_text()
+    def cv_html(self, candidate_id: str) -> str:
+        cv_file = self._read()["candidates"][candidate_id]["cv"]
+        return (FIXTURES / "cvs" / cv_file).read_text()
 
-    def field(self, card: str, cid: str, name: str, by: str) -> str:
-        c = self._read()["candidates"][cid]
+    def field(self, card_id: str, candidate_id: str, name: str, asked_by: str) -> str:
+        record = self._read()["candidates"][candidate_id]
         if name in PRIVATE:
-            self.audit(card, "private fields", cid, f"refused {by}: {name.replace('_', ' ')}")
+            what = f"refused {asked_by}: {name.replace('_', ' ')}"
+            self.audit(card_id, "private fields", candidate_id, what)
             raise Refused(f"{name} is private: screening may not use it")
         if name != "name":
             raise Refused(f"no field called {name}")
-        return c["name"]
+        return record["name"]
 
-    def audit(self, card: str, check: str, cid: str, what: str) -> None:
-        db = self._read()
-        db.setdefault("audit", []).append({"card": card, "check": check, "candidate": cid, "what": what})
-        self._write(db)
+    def audit(self, card_id: str, check: str, candidate_id: str, what: str, found: tuple = ()) -> None:
+        data = self._read()
+        row = {"card": card_id, "check": check, "candidate": candidate_id, "what": what}
+        if found:
+            row["found"] = list(found)
+        data.setdefault("audit", []).append(row)
+        self._write(data)
 
-    def log(self, card: str) -> list[dict]:
-        return [a for a in self._read().get("audit", []) if a["card"] == card]
+    def log(self, card_id: str) -> list[dict]:
+        return [row for row in self._read().get("audit", []) if row["card"] == card_id]
 
-    def flag(self, card: str, cid: str, hidden: list[str]) -> None:
-        db = self._read()
-        if cid in db.get("flags", {}).get(card, {}):
+    def flag(self, card_id: str, candidate_id: str, hidden: list[str]) -> None:
+        data = self._read()
+        if candidate_id in data.get("flags", {}).get(card_id, {}):
             return
-        db.setdefault("flags", {}).setdefault(card, {})[cid] = {"hidden": hidden, "reviewed_by": None}
-        self._write(db)
-        self.audit(card, "hidden text", cid, "withheld from the screener: text a person cannot see")
+        flags = data.setdefault("flags", {}).setdefault(card_id, {})
+        flags[candidate_id] = {"hidden": hidden, "reviewed_by": None}
+        self._write(data)
+        what = "withheld from the screener: text a person cannot see"
+        self.audit(card_id, "hidden text", candidate_id, what)
 
-    def flags(self, card: str) -> dict[str, dict]:
-        return self._read().get("flags", {}).get(card, {})
+    def flags(self, card_id: str) -> dict[str, dict]:
+        return self._read().get("flags", {}).get(card_id, {})
 
-    def review(self, card: str, cid: str, by: str, reject: bool) -> None:
-        """A recruiter's call on a flagged CV. Only a person named in the system may make it."""
-        db = self._read()
-        if by != db["recruiter"]:
-            raise Refused(f"{by} is not a recruiter on this role")
-        f = db.get("flags", {}).get(card, {}).get(cid)
-        if f is None:
-            raise Refused(f"{cid} is not flagged on {card}")
-        f.update(reviewed_by=by, rejected=reject)
-        self._write(db)
-        self.audit(
-            card, "recruiter", cid, f"{by} {'rejected the application' if reject else 'cleared the CV'}"
-        )
+    def review(self, card_id: str, candidate_id: str, reviewer: str, reject: bool) -> None:
+        """The recruiter's call on a flagged CV. Anyone else is refused, and the refusal is logged."""
+        data = self._read()
+        if reviewer != data["recruiter"]:
+            what = f"{reviewer} may not review this CV: only the recruiter reviews a flagged CV"
+            self.audit(card_id, "review refused", candidate_id, what)
+            raise Refused(what)
+        flag = data.get("flags", {}).get(card_id, {}).get(candidate_id)
+        if flag is None:
+            raise Refused(f"{candidate_id} is not flagged on {card_id}")
+        flag.update(reviewed_by=reviewer, rejected=reject)
+        self._write(data)
+        verdict = "rejected the application" if reject else "cleared the CV"
+        self.audit(card_id, "recruiter", candidate_id, f"{reviewer} {verdict}")
 
-    def submit(self, card: str, req: str, ids: list[str], by: str) -> dict:
-        db = self._read()
-        role, flags = db["roles"][req], db.get("flags", {}).get(card, {})
-        if len(set(ids)) != role["shortlist"] or len(ids) != role["shortlist"]:
-            raise Refused(f"{role['title']} needs a shortlist of {role['shortlist']} different people")
-        if stray := [i for i in ids if i not in role["applicants"]]:
-            raise Refused(f"{', '.join(stray)} did not apply to {req}")
-        if held := [i for i in ids if i in flags and (not flags[i]["reviewed_by"] or flags[i]["rejected"])]:
+    @staticmethod
+    def is_held(flag: dict) -> bool:
+        return not flag["reviewed_by"] or flag["rejected"]
+
+    def submit(self, card_id: str, requisition: str, candidate_ids: list[str], submitted_by: str) -> dict:
+        data = self._read()
+        role = data["roles"][requisition]
+        flags = data.get("flags", {}).get(card_id, {})
+        size = role["shortlist"]
+        if len(set(candidate_ids)) != size or len(candidate_ids) != size:
+            raise Refused(f"{role['title']} needs a shortlist of {size} different people")
+        strangers = [item for item in candidate_ids if item not in role["applicants"]]
+        if strangers:
+            raise Refused(f"{', '.join(strangers)} did not apply to {requisition}")
+        held = [item for item in candidate_ids if item in flags and self.is_held(flags[item])]
+        if held:
             raise Refused(f"{', '.join(held)} is flagged for a recruiter and cannot be shortlisted")
-        sl = {"req": req, "candidates": ids, "by": by, "manager": role["manager"]}
-        db.setdefault("shortlists", {})[card] = sl
-        self._write(db)
-        return sl
+        shortlist = {
+            "req": requisition,
+            "candidates": candidate_ids,
+            "by": submitted_by,
+            "manager": role["manager"],
+        }
+        data.setdefault("shortlists", {})[card_id] = shortlist
+        self._write(data)
+        return shortlist
 
-    def shortlist(self, card: str) -> dict | None:
-        return self._read().get("shortlists", {}).get(card)
+    def shortlist(self, card_id: str) -> dict | None:
+        return self._read().get("shortlists", {}).get(card_id)

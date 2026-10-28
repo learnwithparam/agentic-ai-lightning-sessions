@@ -1,6 +1,6 @@
 # Secure AI Agents with Guardrails
 
-The screener that shortlists Acme's payroll applicants, on `../mission-control`'s board.
+The screener that shortlists KaaS Retail's payroll applicants, on `../mission-control`'s board.
 
 - `make check` is the gate: ruff, format and pytest. The guardrails and the hiring system are real; the
   model is the SDK's `ScriptedModel`, so it needs no keys.

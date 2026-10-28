@@ -1,0 +1,4 @@
+[
+  {"name": "Maya Okafor", "role": "hiring manager", "passphrase_env": "BOARD_PASSPHRASE_MAYA_OKAFOR"},
+  {"name": "Sam Patel", "role": "recruiter", "passphrase_env": "BOARD_PASSPHRASE_SAM_PATEL"}
+]

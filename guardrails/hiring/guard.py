@@ -49,32 +49,33 @@ class Scan:
 class _Reader(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
-        self.stack: list[bool] = []
-        self.parts: list[tuple[str, bool]] = []
+        self.hidden_stack: list[bool] = []
+        self.pieces: list[tuple[str, bool]] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag in VOID:
             return
         style = dict(attrs).get("style") or ""
-        self.stack.append(bool(self.stack and self.stack[-1]) or bool(INVISIBLE.search(style)))
+        inside_hidden = bool(self.hidden_stack and self.hidden_stack[-1])
+        self.hidden_stack.append(inside_hidden or bool(INVISIBLE.search(style)))
 
     def handle_endtag(self, tag: str) -> None:
-        if tag not in VOID and self.stack:
-            self.stack.pop()
+        if tag not in VOID and self.hidden_stack:
+            self.hidden_stack.pop()
 
     def handle_data(self, data: str) -> None:
         if data.strip():
-            self.parts.append((" ".join(data.split()), bool(self.stack and self.stack[-1])))
+            self.pieces.append((" ".join(data.split()), bool(self.hidden_stack and self.hidden_stack[-1])))
 
 
 def scan(html: str) -> Scan:
     """What a parser extracts, what a person sees, and the text only the parser gets."""
-    r = _Reader()
-    r.feed(html)
+    reader = _Reader()
+    reader.feed(html)
     return Scan(
-        "\n".join(t for t, _ in r.parts),
-        "\n".join(t for t, hid in r.parts if not hid),
-        [t for t, hid in r.parts if hid],
+        "\n".join(text for text, _ in reader.pieces),
+        "\n".join(text for text, hidden in reader.pieces if not hidden),
+        [text for text, hidden in reader.pieces if hidden],
     )
 
 
@@ -85,7 +86,7 @@ def protected(text: str) -> list[str]:
 def said(items: str | list) -> str:
     if isinstance(items, str):
         return items
-    return "\n".join(str(i.get("content", "")) for i in items if isinstance(i, dict))
+    return "\n".join(str(item.get("content", "")) for item in items if isinstance(item, dict))
 
 
 @input_guardrail(name="fair request", run_in_parallel=False)
@@ -94,9 +95,8 @@ def fair_request(ctx: RunContextWrapper, agent: Agent, items: str | list) -> Gua
     found = protected(said(items))
     if found:
         desk = ctx.context
-        desk.ats.audit(
-            desk.card.id, "fair request", "", f"blocked: the request screens by {', '.join(found)}"
-        )
+        what = f"blocked: the request screens by {', '.join(found)}"
+        desk.ats.audit(desk.card.id, "fair request", "", what, found=tuple(found))
     return GuardrailFunctionOutput(found, tripwire_triggered=bool(found))
 
 
@@ -104,12 +104,13 @@ def fair_request(ctx: RunContextWrapper, agent: Agent, items: str | list) -> Gua
 def hidden_text(data: ToolOutputGuardrailData) -> ToolGuardrailFunctionOutput:
     """A CV whose text differs from what a person sees is withheld from the model and sent to a person."""
     desk = data.context.context
-    cid = json.loads(data.context.tool_arguments or "{}").get("candidate_id", "")
-    found = [h for h in scan(desk.ats.cv(cid)).hidden if h in str(data.output)] if cid else []
+    candidate_id = json.loads(data.context.tool_arguments or "{}").get("candidate_id", "")
+    hidden = scan(desk.ats.cv_html(candidate_id)).hidden if candidate_id else []
+    found = [hidden_line for hidden_line in hidden if hidden_line in str(data.output)]
     if not found:
         return ToolGuardrailFunctionOutput.allow()
-    name = desk.ats.candidate(cid)["name"]
-    desk.ats.flag(desk.card.id, cid, found)
+    name = desk.ats.candidate(candidate_id)["name"]
+    desk.ats.flag(desk.card.id, candidate_id, found)
     return ToolGuardrailFunctionOutput.reject_content(
         f"{name}'s CV is withheld for a recruiter: it holds text a person reading it cannot see. "
         f"Do not shortlist {name}; judge the others."
