@@ -5,7 +5,7 @@ SHELL := /bin/bash
 RUN := PYTHONPATH=../mission-control uv run --quiet
 KEYS := --env-file ../mission-control/.env
 
-.PHONY: help check demo solo board
+.PHONY: help check demo solo board rehearse
 
 help: ## List every target
 	@grep -E '^[a-z0-9-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[33m%-8s\033[0m %s\n", $$1, $$2}'
@@ -23,3 +23,6 @@ solo: ## One agent with every tool works the same card, for comparison
 
 board: ## Serve the signed-in board on http://127.0.0.1:8090 (make board SOLO=1 for the solo run)
 	$(RUN) $(KEYS) python -m crew.team --serve $(if $(SOLO),--solo)
+
+rehearse: ## Sign in as Priya and Dana on the running board and walk the approval to Done
+	$(RUN) $(KEYS) python rehearse.py
