@@ -13,7 +13,13 @@ from agents.testing import ScriptedModel, assistant_message, function_call
 from aiohttp.test_utils import TestClient, TestServer
 
 from crew.board import PEOPLE_FILE, TASKS, app, card_page
-from crew.gateway import TOOLS_EACH_AGENT_MAY_CALL, AgentName, Gateway, read_call_log
+from crew.gateway import (
+    TOOLS_EACH_AGENT_MAY_CALL,
+    AgentName,
+    Gateway,
+    describe_flight,
+    read_call_log,
+)
 from crew.team import (
     NARRATION_MAX_COLUMNS,
     SEED,
@@ -343,6 +349,17 @@ def test_a_sold_out_flight_leaves_only_the_fare_that_waits_for_the_manager(tmp_p
         travel.book("C-3", "LH921", AgentName.BOOKER)["status"]
         == TicketStatus.WAITING_FOR_MANAGER
     )
+
+
+@pytest.mark.lab("build-a-team-of-ai-agents")
+def test_the_flight_search_says_which_flights_land_in_time_for_the_meeting(tmp_path):
+    travel = Travel.open(tmp_path)
+    verdicts = {
+        flight["id"]: describe_flight(flight, travel.lands_in_time(flight))
+        for flight in travel.flights()
+    }
+    assert verdicts["EW461"].endswith("lands in time")
+    assert verdicts["BA984"].endswith("lands too late for the meeting")
 
 
 @pytest.mark.lab("build-a-team-of-ai-agents")

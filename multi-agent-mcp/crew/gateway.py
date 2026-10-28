@@ -122,10 +122,11 @@ def read_call_log(state: Path, card: str | None = None) -> list[dict]:
     return [row for row in rows if card is None or row["card"] == card]
 
 
-def describe_flight(flight: dict) -> str:
+def describe_flight(flight: dict, lands_in_time: bool) -> str:
+    verdict = "lands in time" if lands_in_time else "lands too late for the meeting"
     return (
         f"{flight['id']} {flight['departs']} to {flight['lands']}, {flight['cabin']}, "
-        f"£{flight['fare']}, {flight['seats']} seats"
+        f"£{flight['fare']}, {flight['seats']} seats, {verdict}"
     )
 
 
@@ -162,7 +163,10 @@ def register_travel_tools(gateway: Gateway) -> None:
     @scoped_tool(gateway)
     def search_flights() -> str:
         """List the flights on the trip's route and day, with times, cabin, fare and seats left."""
-        return "\n".join(describe_flight(flight) for flight in travel.flights())
+        return "\n".join(
+            describe_flight(flight, travel.lands_in_time(flight))
+            for flight in travel.flights()
+        )
 
     @scoped_tool(gateway)
     def book_flight(flight_id: str) -> str:

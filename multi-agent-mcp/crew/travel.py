@@ -66,6 +66,11 @@ class Travel:
             if (flight["from"], flight["to"], flight["date"]) == route_and_day
         ]
 
+    def lands_in_time(self, flight: dict) -> bool:
+        lands_at = minutes_after_midnight(flight["lands"])
+        meeting_at = minutes_after_midnight(self.trip()["meeting"])
+        return lands_at + MINUTES_FROM_LANDING_TO_THE_MEETING <= meeting_at
+
     def mark_full(self, flight_id: str) -> None:
         """Sell out one flight, so the room can watch the crew cope with it."""
         data = self._read()
@@ -100,9 +105,7 @@ class Travel:
             )
         if flight["seats"] < 1:
             raise Refused(f"{flight_id} is full")
-        lands_at = minutes_after_midnight(flight["lands"])
-        meeting_at = minutes_after_midnight(trip["meeting"])
-        if lands_at + MINUTES_FROM_LANDING_TO_THE_MEETING > meeting_at:
+        if not self.lands_in_time(flight):
             raise Refused(
                 f"{flight_id} lands {flight['lands']}, too late for the {trip['meeting']} meeting"
             )
