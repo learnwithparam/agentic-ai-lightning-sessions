@@ -14,6 +14,7 @@ help: ## List every target
 
 check: ## The session index, then every built session's own gate
 	python3 scripts/check_sessions.py
+	python3 scripts/kaas/check-affected.py --audit
 	@mkdir -p reports; for d in $(BUILT); do echo "== $$d"; \
 	  PYTEST_ADDOPTS="-k 'not quarantine' --junitxml=$(CURDIR)/reports/$$d.xml" $(MAKE) -C $$d check || exit 1; done
 

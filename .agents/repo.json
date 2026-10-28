@@ -17,5 +17,62 @@
   "kitExtras": [
     "scripts/kaas/check-security.py",
     "scripts/kaas/semgrep.yml"
-  ]
+  ],
+  "impact": {
+    "full": [
+      "mission-control/workforce/**",
+      "scripts/check_sessions.py",
+      ".github/**"
+    ],
+    "ignore": [
+      "factory/**",
+      "README.md",
+      "AGENTS.md",
+      "CLAUDE.md",
+      ".gitignore"
+    ],
+    "fullAt": 40,
+    "checks": [
+      {
+        "name": "index",
+        "when": [
+          "sessions.toml",
+          "*/steps.toml",
+          "*/**/*.py",
+          "*/Makefile",
+          "Makefile",
+          ".agents/repo.json"
+        ],
+        "run": "python3 scripts/check_sessions.py && python3 scripts/kaas/check-affected.py --audit"
+      },
+      {
+        "name": "session",
+        "when": [
+          "evals-from-traces/**",
+          "governance/**",
+          "guardrails/**",
+          "mission-control/**",
+          "multi-agent-mcp/**",
+          "second-brain/**",
+          "token-economics/**",
+          "trace-in-production/**"
+        ],
+        "run": "for d in evals-from-traces governance guardrails mission-control multi-agent-mcp second-brain token-economics trace-in-production; do make -C $d check || exit 1; done",
+        "each": "^(evals-from-traces|governance|guardrails|mission-control|multi-agent-mcp|second-brain|token-economics|trace-in-production)/",
+        "scoped": "for d in {items}; do make -C $d check || exit 1; done",
+        "alone": true,
+        "covers": [
+          "make check",
+          "mkdir -p reports; for d in $(BUILT); do echo \"== $$d\";  \t  PYTEST_ADDOPTS=\"-k 'not quarantine' --junitxml=$(CURDIR)/reports/$$d.xml\" $(MAKE) -C $$d check || exit 1; done"
+        ]
+      },
+      {
+        "name": "security",
+        "when": [
+          "**"
+        ],
+        "run": "python3 scripts/kaas/check-security.py gitleaks,semgrep,osv-scanner"
+      }
+    ]
+  }
 }
