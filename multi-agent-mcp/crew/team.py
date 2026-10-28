@@ -108,6 +108,9 @@ class LiveSteps(Steps):
         print(paint(narration_line(agent.name, tool.name, said), tone), flush=True)
 
 
+EXTRA_ATTEMPTS_WITHOUT_A_TICKET = 2
+
+
 def tool_result_text(result: object) -> str:
     """What the tool said, from the MCP content the SDK hands back (a dict or its printed form)."""
     content = result
@@ -180,9 +183,10 @@ def build_crew(gateways: dict[AgentName, MCPServerStdio], model: Model | str) ->
         AgentName.BOOKER,
         gateways[AgentName.BOOKER],
         model,
-        "You book flights for KaaS Travel's travellers. Book the flight the planner chose with "
-        "book_flight. If the travel system refuses it, book the next option the planner listed. Hand the card "
-        "to the messenger only after a booking went through or every option was refused.",
+        "You book flights for KaaS Travel's travellers. The planner's flight search is above, and each "
+        "flight says whether it lands in time. Book the cheapest flight that lands in time with book_flight, "
+        "and book it before you hand over. If the travel system refuses it, book the next one that lands in "
+        "time. Hand the card to the messenger only after a booking went through or every option was refused.",
         handoff_description="Books one flight from the planner's options.",
         handoffs=[build_messenger(gateways[AgentName.MESSENGER], model)],
         reset_tool_choice=False,
@@ -334,8 +338,10 @@ async def work(
         employees = [AgentName.TRIP_PLANNER, AgentName.BOOKER, AgentName.MESSENGER]
         build_first_agent = build_crew
     card = await run_employees(board, card, employees, build_first_agent, model, live)
-    # A real model sometimes hands over before booking; the card has no ticket, so the crew tries once more.
-    if not alone and Travel(board.path.parent).ticket(card.id) is None:
+    # A real model sometimes hands over before booking; with no ticket the crew tries again.
+    for _ in range(EXTRA_ATTEMPTS_WITHOUT_A_TICKET):
+        if alone or Travel(board.path.parent).ticket(card.id):
+            break
         card = await run_employees(
             board, card, employees, build_first_agent, model, live
         )

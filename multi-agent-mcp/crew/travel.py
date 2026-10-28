@@ -10,7 +10,7 @@ contact on the trip. A flight is booked only when this system says so.
 from __future__ import annotations
 
 import json
-import shutil
+import os
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -44,14 +44,18 @@ class Travel:
     def open(cls, state: Path) -> Travel:
         state.mkdir(parents=True, exist_ok=True)
         if not (state / "travel.json").exists():
-            shutil.copy(FIXTURES / "travel.json", state / "travel.json")
+            cls(state)._write(json.loads((FIXTURES / "travel.json").read_text()))
         return cls(state)
 
     def _read(self) -> dict:
         return json.loads((self.state / "travel.json").read_text())
 
     def _write(self, data: dict) -> None:
-        (self.state / "travel.json").write_text(json.dumps(data, indent=1))
+        # Three gateway processes share this file, so a reader must never see a half-written one.
+        path = self.state / "travel.json"
+        draft = path.with_suffix(f".{os.getpid()}.tmp")
+        draft.write_text(json.dumps(data, indent=1))
+        os.replace(draft, path)
 
     def trip(self) -> dict:
         return self._read()["trip"]
@@ -160,6 +164,8 @@ class Travel:
         data = self._read()
         if recipient not in data["trip"]["contacts"]:
             raise Refused(f"{recipient} is not a contact on {data['trip']['id']}")
+        if self.ticket(card) is None:
+            raise Refused("there is no ticket yet, so there is nothing to tell anyone")
         message = {
             "card": card,
             "to": recipient,

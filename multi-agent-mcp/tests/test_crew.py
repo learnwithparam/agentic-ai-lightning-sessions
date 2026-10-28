@@ -159,6 +159,13 @@ def test_the_crew_tries_again_when_the_booker_hands_over_without_booking(board):
 
 
 @pytest.mark.lab("build-a-team-of-ai-agents")
+def test_nobody_is_told_before_a_ticket_exists(tmp_path):
+    travel = Travel.open(tmp_path)
+    with pytest.raises(Refused, match="no ticket yet"):
+        travel.send("C-3", "Priya Shah", "Your flight is EW461.", sent_by="Messenger")
+
+
+@pytest.mark.lab("build-a-team-of-ai-agents")
 def test_a_ticket_nobody_was_told_about_never_closes_the_card(board):
     card = asyncio.run(
         work(board, board.cards[0], model=crew_model(told("Priya Shah", call_id="m2")))
