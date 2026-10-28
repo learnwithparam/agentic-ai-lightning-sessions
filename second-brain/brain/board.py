@@ -20,6 +20,7 @@ from workforce.board import CHECK, WEB, Board, Role, chips, detail, page, plain,
 
 E = html.escape
 CSS = Path(__file__).resolve().parent.parent / "web" / "brain.css"
+WORKSPACE = "KaaS Consulting"
 
 
 def cited_html(vault: Vault, state: Path, card_id: str, answer: str) -> str:
@@ -59,7 +60,7 @@ def calls_html(rows: list[dict]) -> str:
 def card_page(state: Path, card_id: str, vault: Vault) -> str:
     c = Board.open(state / "board.json").card(card_id)
     # The board's own receipt shows chips only; the brain's shows each quote, so it replaces it.
-    page_ = detail(replace(c, sources=[]), None)
+    page_ = detail(replace(c, sources=[]), None, workspace=WORKSPACE)
     extra = cited_html(vault, state, c.id, c.answer) + calls_html(calls(state, c.id))
     return with_css(page_.replace('<h2 class="sec">Runs</h2>', extra + '<h2 class="sec">Runs</h2>', 1))
 
@@ -75,7 +76,7 @@ def note_page(vault: Vault, name: str, mark: str) -> str:
         f'<h2 class="sec">Facts</h2><p class="sub">Each line is quoted word for word from {E(n.source)}.</p>'
         f'<ul class="facts">{facts}</ul></div>'
     )
-    return with_css(page(n.title, live, ""))
+    return with_css(page(n.title, live, "", workspace=WORKSPACE))
 
 
 def with_css(p: str) -> str:
@@ -86,7 +87,10 @@ def app(state: Path, roster: tuple[Role, ...], brain: Path = BRAIN) -> web.Appli
     vault = Vault(brain)
 
     async def index(_: web.Request) -> web.Response:
-        return web.Response(text=with_css(render(Board.open(state / "board.json"))), content_type="text/html")
+        return web.Response(
+            text=with_css(render(Board.open(state / "board.json"), workspace=WORKSPACE)),
+            content_type="text/html",
+        )
 
     async def one(req: web.Request) -> web.Response:
         try:
@@ -103,7 +107,8 @@ def app(state: Path, roster: tuple[Role, ...], brain: Path = BRAIN) -> web.Appli
 
     async def roster_page(_: web.Request) -> web.Response:
         return web.Response(
-            text=with_css(team(Board.open(state / "board.json"), roster)), content_type="text/html"
+            text=with_css(team(Board.open(state / "board.json"), roster, workspace=WORKSPACE)),
+            content_type="text/html",
         )
 
     async def css(_: web.Request) -> web.FileResponse:

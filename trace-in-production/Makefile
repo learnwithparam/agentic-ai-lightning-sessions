@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
-# The board, the span helpers and Telegram come from mission-control, the app every Lightning extends, and
-# so does its .env, so the model, Telegram and Langfuse keys live in one place. The crew names its model in
+# The board, the span helpers come from mission-control, the app every Lightning extends, and
+# so does its .env, so the model and Langfuse keys live in one place. The crew names its model in
 # upkeep/crew.py; the recipes are silent, so a recording shows the shift, never a model name.
 # Langfuse's local keys from mission-control's compose.yaml, the same as its STACK_ENV; not real secrets.
 LANGFUSE := LANGFUSE_HOST=http://127.0.0.1:8270 LANGFUSE_PUBLIC_KEY=pk-lf-acme-local LANGFUSE_SECRET_KEY=sk-lf-acme-local

@@ -16,6 +16,7 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
+from workforce.board import read_json
 from workforce.sources import FIXTURES
 
 AUTHOR = "acme-support"
@@ -41,7 +42,7 @@ class Issues:
         return cls(path, repo, token) if repo and token else cls(path)
 
     def _rows(self) -> list[dict]:
-        return json.loads(self.path.read_text())
+        return read_json(self.path, [])
 
     def _api(self, path: str, body: dict | None = None, root: str = "") -> object:
         req = urllib.request.Request(  # noqa: S310 - fixed https host

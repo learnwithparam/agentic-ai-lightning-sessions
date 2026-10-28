@@ -13,7 +13,7 @@ compressor's repair twice. **After:** every span reaches Langfuse as it starts a
 board moves a card to In flight before its run starts, so a restart finds the run that died, reads its
 spend back from its trace, and works the card again; the maintenance system hands back the order
 already booked for that alert. `make traces` checks every card's runs against Langfuse, per employee,
-and the budget alert reaches Ingrid on Telegram once, kill or no kill.
+and the budget alert reaches Ingrid on the board once, kill or no kill.
 
 ```
 make check     # lint and the acceptance tests: real tools, tracer and budget; scripted model, fake Langfuse

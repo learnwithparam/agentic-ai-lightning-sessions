@@ -26,7 +26,6 @@ from workforce.mission import (
     work,
 )
 from workforce.sources import Readers
-from workforce.telegram import Telegram
 
 TOKENS = Usage(requests=1, input_tokens=2000, output_tokens=200, total_tokens=2200)
 DRAFT = (
@@ -65,7 +64,7 @@ def resolver_drafts(body=DRAFT, then=None):
 
 
 async def approve(card):
-    return "telegram:param", True
+    return "board:param", True
 
 
 @pytest.mark.lab("build-an-ai-mission-control-app")
@@ -87,15 +86,15 @@ def test_a_customer_issue_is_done_only_after_a_human_approves_and_github_shows_t
     asyncio.run(ask_human(board, card, issues, approve))
 
     [posted] = Issues.open(issues.path).comments(412)
-    assert posted["approved_by"] == "telegram:param" and "one quarter at a time" in posted["body"]
+    assert posted["approved_by"] == "board:param" and "one quarter at a time" in posted["body"]
     assert card.column == "Done" and card.log[-1] == "Done: GitHub shows the reply on GH#412"
     # Five model calls at 2,000 in and 200 out, at $1 and $10 per million tokens.
     assert card.cost == pytest.approx(5 * (2000 * 1.0 + 200 * 10.0) / 1e6)
     assert board.cost_per_outcome == pytest.approx(card.cost)
     # The board on disk is the board on the page, and the Done card carries GitHub's copy of the reply.
-    page = render(Board.open(board.path), {card.id: posted})
+    page = render(Board.open(board.path), {card.id: posted}, workspace="KaaS")
     assert "Globex: CSV export times out" in page and f"${card.cost:.4f}" in page
-    assert "GitHub shows the reply" in page and "Approved by</dt><dd>telegram:param" in page
+    assert "GitHub shows the reply" in page and "Approved by</dt><dd>board:param" in page
 
 
 def test_no_ai_employee_can_approve_a_reply_an_ai_employee_drafted(desk):
@@ -152,13 +151,13 @@ def test_a_declined_reply_posts_nothing_and_a_repeated_approval_posts_once(desk)
     asyncio.run(work(board, card, issues, support(), model=resolver_drafts()))
 
     async def decline(card):
-        return "telegram:param", False
+        return "board:param", False
 
     asyncio.run(ask_human(board, card, issues, decline))
     assert issues.comments(412) == [] and card.column == "Backlog"
 
-    issues.reply(412, "Hello", card.id, approved_by="telegram:param")
-    issues.reply(412, "Hello", card.id, approved_by="telegram:param")
+    issues.reply(412, "Hello", card.id, approved_by="board:param")
+    issues.reply(412, "Hello", card.id, approved_by="board:param")
     assert len(Issues.open(issues.path).comments(412)) == 1
 
 
@@ -192,7 +191,7 @@ def test_the_card_page_shows_each_run_step_by_step(desk):
         "Support resolver called request_reply",
     ]
     assert run.read == ["EXP-41", "GH#412", "doc:exports"]
-    page = detail(card, None)
+    page = detail(card, None, workspace="KaaS")
     assert "Post this reply on GH#412?" in page and "<li>Support resolver called read_issue</li>" in page
 
 
@@ -200,7 +199,7 @@ def test_the_board_buttons_approve_through_the_same_gate(desk, tmp_path):
     board, card, issues = desk
     asyncio.run(work(board, card, issues, support(), model=resolver_drafts()))
     card.pending["asked"] = "board"
-    assert 'action="/cards/C-1/decide"' in render(board)
+    assert 'action="/cards/C-1/decide"' in render(board, workspace="KaaS")
 
     (tmp_path / "decisions").mkdir()
     (tmp_path / "decisions" / "C-1.json").write_text(json.dumps({"by": "board:param", "yes": True}))
@@ -211,38 +210,10 @@ def test_the_board_buttons_approve_through_the_same_gate(desk, tmp_path):
 
 def test_every_employee_on_the_team_page_has_an_outcome_a_metric_and_a_must_never(desk):
     board, _, _ = desk
-    page = team(board, TEAM)
+    page = team(board, TEAM, workspace="KaaS")
     for role in TEAM:
         assert role.outcome and role.metric and role.never
         assert role.name in page and role.never in page
-
-
-def test_telegram_counts_only_a_tap_on_this_cards_message_in_the_chat():
-    card = replace(SEED, runs=[], log=[])
-    card.pending = {"issue": 412, "body": "Hi", "rests_on": ["EXP-41"], "maker": "Support resolver"}
-    sent = []
-
-    def tap(message_id, chat, data, user="param"):
-        q = {"id": "q", "data": data, "from": {"id": 7, "username": user}}
-        return {
-            "update_id": len(sent),
-            "callback_query": {**q, "message": {"message_id": message_id, "chat": {"id": chat}}},
-        }
-
-    def call(method, payload):
-        sent.append((method, payload))
-        if method == "sendMessage":
-            return {"message_id": 50}
-        if method == "getUpdates":
-            return [tap(49, 1, "C-1:yes", "old"), tap(50, 2, "C-1:yes", "stranger"), tap(50, 1, "C-1:yes")]
-        return True
-
-    by, yes = asyncio.run(Telegram(1, call)(card))
-
-    assert (by, yes) == ("telegram:7", True)
-    assert "Rests on EXP-41" in sent[0][1]["text"]
-    buttons = sent[0][1]["reply_markup"]["inline_keyboard"][0]
-    assert [b["callback_data"] for b in buttons] == ["C-1:yes", "C-1:no"]
 
 
 def test_internal_ids_are_cut_from_what_the_customer_reads():
@@ -274,7 +245,7 @@ def test_a_question_card_is_done_only_when_its_answer_cites_a_source_the_analyst
     # The manager handed the question to the analyst, which read Linear; the id it never read is cut.
     assert card.employee == "Engineering analyst" and card.column == "Done"
     assert card.sources == ["EXP-41"] and "GH#999" not in card.answer
-    page = render(board)
+    page = render(board, workspace="KaaS")
     assert "Answered from sources it read" in page and "<p>Known: the export" in page
     assert issues.comments(412) == []
 

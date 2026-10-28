@@ -13,6 +13,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from workforce.board import is_blank
+
 ROOT = Path(__file__).resolve().parent.parent
 _FIX = tomllib.loads((ROOT / "fixtures" / "hotels.toml").read_text())
 HOTELS: dict[str, dict] = _FIX["hotels"]
@@ -57,7 +59,7 @@ class Systems:
 
     @classmethod
     def open(cls, path: Path) -> Systems:
-        return cls(path, **json.loads(path.read_text())) if path.exists() else cls(path)
+        return cls(path) if is_blank(path) else cls(path, **json.loads(path.read_text()))
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)

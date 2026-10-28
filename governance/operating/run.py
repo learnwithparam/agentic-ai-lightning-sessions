@@ -21,7 +21,7 @@ from operating.cost import cost
 from operating.crew import handle, model
 from operating.hotels import HOTELS, JOBS, ROOT, Systems, describe, town
 from operating.record import Record
-from workforce.board import Board, Card, Run, usd
+from workforce.board import Board, Card, Run, read_json, usd
 from workforce.mission import paint
 
 STATE = ROOT / ".halden"
@@ -75,7 +75,7 @@ def spent(board: Board, name: str) -> float:
 
 def waiting(state: Path) -> dict[str, dict]:
     f = state / "waiting.json"
-    return json.loads(f.read_text()) if f.exists() else {}
+    return read_json(f, {})
 
 
 def hold(state: Path, rows: dict[str, dict]) -> None:

@@ -12,6 +12,8 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+from workforce.board import is_blank
+
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 PRIVATE = ("date_of_birth", "nationality", "home_address")
 
@@ -27,7 +29,7 @@ class ATS:
     @classmethod
     def open(cls, state: Path) -> ATS:
         db = state / "ats.json"
-        if not db.exists():
+        if is_blank(db):
             state.mkdir(parents=True, exist_ok=True)
             shutil.copy(FIXTURES / "ats.json", db)
         return cls(state)

@@ -16,9 +16,10 @@ from evals.desk import DESK, INQUIRIES
 from evals.judge import TRUST
 from evals.score import SAID
 from evals.testset import LABELS
-from workforce.board import WEB, Board, Card, E, Role, Run, detail, render, team, usd
+from workforce.board import WEB, Board, Card, E, Role, Run, detail, is_blank, render, team, usd
 
 CSS = Path(__file__).resolve().parent.parent / "web" / "evals.css"
+WORKSPACE = "KaaS Pharma"
 TEAM = (
     Role(
         DESK,
@@ -109,20 +110,20 @@ def label_html(card_id: str) -> str:
 
 def report_of(state: Path) -> dict:
     f = state / "report.json"
-    if not f.exists():
+    if is_blank(f):
         raise web.HTTPNotFound(text="No evals yet. Run make demo first.")
     return json.loads(f.read_text())
 
 
 def board_page(state: Path) -> str:
     report = report_of(state)
-    page = render(Board(state / "board.json", cards(report)))
+    page = render(Board(state / "board.json", cards(report)), workspace=WORKSPACE)
     return with_css(page.replace('<div class="lanes">', swap_html(report) + '<div class="lanes">', 1))
 
 
 def card_page(state: Path, card_id: str) -> str:
     card = next(c for c in cards(report_of(state)) if c.id == card_id)
-    page = detail(card, None)
+    page = detail(card, None, workspace=WORKSPACE)
     return with_css(
         page.replace('<h2 class="sec">Runs</h2>', label_html(card_id) + '<h2 class="sec">Runs</h2>', 1)
     )
@@ -144,7 +145,7 @@ def app(state: Path) -> web.Application:
 
     async def roster(_: web.Request) -> web.Response:
         board = Board(state / "board.json", cards(report_of(state)))
-        return web.Response(text=with_css(team(board, TEAM)), content_type="text/html")
+        return web.Response(text=with_css(team(board, TEAM, workspace=WORKSPACE)), content_type="text/html")
 
     async def css(_: web.Request) -> web.FileResponse:
         return web.FileResponse(CSS)

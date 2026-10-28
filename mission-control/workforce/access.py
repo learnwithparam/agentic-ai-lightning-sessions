@@ -152,8 +152,8 @@ class Access:
         return None
 
     def may_approve(self, who: str, desk: str = "support") -> bool:
-        # A channel id (telegram:<numeric id>) is not a person until policy.json or MISSION_APPROVERS
-        # names one, so a renamed Telegram account or an unknown tapper is refused.
+        # A channel id is not a person until policy.json or MISSION_APPROVERS names one,
+        # so an unknown id is refused.
         user = self.approvers.get(who)
         return user is not None and self.check(f"user:{user}", "can_approve", f"desk:{desk}")
 

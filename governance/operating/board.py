@@ -19,6 +19,7 @@ from operating.record import Record
 from workforce.board import WEB, Board, E, Role, chips, detail, page, render, team, usd
 
 CSS = Path(__file__).resolve().parent.parent / "web" / "halden.css"
+WORKSPACE = "KaaS Hotels"
 TEAM = (
     Role(
         "Rate manager",
@@ -92,8 +93,7 @@ def record_html(rows: list[dict]) -> str:
 
 
 def dress(html: str, here: str = "") -> str:
-    """Mission Control's page in Halden Hotels' workspace, with the Month page in its nav."""
-    html = html.replace("Workspace <b>Acme</b>", "Workspace <b>Halden Hotels</b>", 1)
+    """Mission Control's page in KaaS Hotels' workspace, with the Month page in its nav."""
     month = (
         '<a href="/month" aria-current=page>Month</a>' if here == "Month" else '<a href="/month">Month</a>'
     )
@@ -102,7 +102,7 @@ def dress(html: str, here: str = "") -> str:
 
 
 def board_page(state: Path) -> str:
-    html = render(Board.open(state / "board.json"))
+    html = render(Board.open(state / "board.json"), workspace=WORKSPACE)
     for card_id, w in run.waiting(state).items():
         html = into_card(html, card_id, ask_html(card_id, w))
     return dress(html)
@@ -110,7 +110,7 @@ def board_page(state: Path) -> str:
 
 def card_page(state: Path, card_id: str) -> str:
     card = Board.open(state / "board.json").card(card_id)
-    html = detail(card, None)
+    html = detail(card, None, workspace=WORKSPACE)
     w = run.waiting(state).get(card_id)
     extra = (ask_html(card_id, w) if w else "") + record_html(Record(state / "record.jsonl").of(card_id))
     return dress(html.replace('<h2 class="sec">Runs</h2>', extra + '<h2 class="sec">Runs</h2>', 1))
@@ -139,7 +139,7 @@ def model_html() -> str:
 
 
 def team_page(state: Path) -> str:
-    html = team(Board.open(state / "board.json"), TEAM)
+    html = team(Board.open(state / "board.json"), TEAM, workspace=WORKSPACE)
     return dress(html.replace('<div class="roster">', model_html() + '<div class="roster">', 1))
 
 
@@ -168,7 +168,7 @@ def month_page(state: Path) -> str:
 <th class="n">Signed</th><th class="n">Declined</th><th class="n">Refused</th><th class="n">AI spend</th>
 <th class="n">Time saved</th><th class="n">Cost per outcome</th></tr></thead><tbody>{body}</tbody></table>
 <p class="sub">Waiting for a signature: {len(run.waiting(state))}.</p></div>"""
-    return dress(page("Month", live, ""), "Month")
+    return dress(page("Month", live, "", workspace=WORKSPACE), "Month")
 
 
 def app(state: Path) -> web.Application:

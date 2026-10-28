@@ -18,6 +18,7 @@ from workforce.board import CHECK, WEB, Board, Role, chips, detail, render, team
 
 E = html.escape
 CSS = Path(__file__).resolve().parent.parent / "web" / "hiring.css"
+WORKSPACE = "KaaS Retail"
 
 
 def shortlist_html(ats: ATS, sl: dict, waiting: bool) -> str:
@@ -83,7 +84,9 @@ def card_page(state: Path, card_id: str) -> str:
     extra += "".join(flagged_html(ats, c.id, cid, f) for cid, f in flags.items())
     extra += audit_html(ats.log(c.id), ats)
     # The hiring system's evidence goes above the runs, so the card reads as outcome first.
-    page = detail(c, None).replace('<h2 class="sec">Runs</h2>', extra + '<h2 class="sec">Runs</h2>', 1)
+    page = detail(c, None, workspace=WORKSPACE).replace(
+        '<h2 class="sec">Runs</h2>', extra + '<h2 class="sec">Runs</h2>', 1
+    )
     return with_css(page)
 
 
@@ -93,7 +96,10 @@ def with_css(page: str) -> str:
 
 def app(state: Path, roster: tuple[Role, ...]) -> web.Application:
     async def index(_: web.Request) -> web.Response:
-        return web.Response(text=with_css(render(Board.open(state / "board.json"))), content_type="text/html")
+        return web.Response(
+            text=with_css(render(Board.open(state / "board.json"), workspace=WORKSPACE)),
+            content_type="text/html",
+        )
 
     async def one(req: web.Request) -> web.Response:
         try:
@@ -117,7 +123,8 @@ def app(state: Path, roster: tuple[Role, ...]) -> web.Application:
 
     async def roster_page(_: web.Request) -> web.Response:
         return web.Response(
-            text=with_css(team(Board.open(state / "board.json"), roster)), content_type="text/html"
+            text=with_css(team(Board.open(state / "board.json"), roster, workspace=WORKSPACE)),
+            content_type="text/html",
         )
 
     async def css(_: web.Request) -> web.FileResponse:

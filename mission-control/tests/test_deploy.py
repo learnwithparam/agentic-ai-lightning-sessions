@@ -37,7 +37,7 @@ FACTS = {
 
 
 def fake(user: str) -> Access:
-    approvers = {"telegram:7": "param", "telegram:8": "sam"}
+    approvers = {"terminal:param": "param", "terminal:sam": "sam"}
     return Access(lambda *fact: fact in FACTS, lambda agent: Badge(client_id(agent), user), user, approvers)
 
 
@@ -79,17 +79,17 @@ def test_an_approver_openfga_refuses_leaves_the_reply_waiting(desk):
     assert card.column == "Needs you"
 
     async def sam(card):
-        return "telegram:8", True
+        return "terminal:sam", True
 
     asyncio.run(ask_human(board, card, issues, sam, fake("param")))
 
     assert issues.comments(412) == [] and card.column == "Needs you" and card.pending
-    assert "telegram:8 may not approve replies" in card.log[-1]
+    assert "terminal:sam may not approve replies" in card.log[-1]
 
     async def renamed(card):
-        return "telegram:param", True
+        return "terminal:renamed", True
 
-    # A Telegram account renamed to param is still not param: only a mapped id counts.
+    # An account renamed to param is still not param: only a mapped id counts.
     asyncio.run(ask_human(board, card, issues, renamed, fake("param")))
     assert issues.comments(412) == [] and card.column == "Needs you"
 

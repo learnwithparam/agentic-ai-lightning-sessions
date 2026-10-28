@@ -43,7 +43,8 @@ class Travel:
     @classmethod
     def open(cls, state: Path) -> Travel:
         state.mkdir(parents=True, exist_ok=True)
-        if not (state / "travel.json").exists():
+        seeded = state / "travel.json"
+        if not seeded.exists() or not seeded.read_text().strip():
             cls(state)._write(json.loads((FIXTURES / "travel.json").read_text()))
         return cls(state)
 

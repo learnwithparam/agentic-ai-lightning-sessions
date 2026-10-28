@@ -18,6 +18,7 @@ from workforce.board import CHECK, WEB, Board, Role, detail, render, team, usd
 
 E = html.escape
 CSS = Path(__file__).resolve().parent.parent / "web" / "claims.css"
+WORKSPACE = "KaaS Insurance"
 
 
 def ladder_html(state: Path, here: int) -> str:
@@ -44,7 +45,7 @@ def on_pass(page: str, n: int) -> str:
 
 
 def board_page(state: Path, n: int) -> str:
-    page = render(Board.open(state / f"pass-{n}" / "board.json"))
+    page = render(Board.open(state / f"pass-{n}" / "board.json"), workspace=WORKSPACE)
     page = page.replace('<div class="lanes">', ladder_html(state, n) + '<div class="lanes">', 1)
     return with_css(on_pass(page, n))
 
@@ -89,7 +90,9 @@ def card_page(state: Path, n: int, card_id: str) -> str:
     c = Board.open(state / f"pass-{n}" / "board.json").card(card_id)
     claims = Claims.open(state / f"pass-{n}")
     extra = filed_html(claims, c.issue) + ledger_html(claims, c.issue)
-    page = detail(c, None).replace('<h2 class="sec">Runs</h2>', extra + '<h2 class="sec">Runs</h2>', 1)
+    page = detail(c, None, workspace=WORKSPACE).replace(
+        '<h2 class="sec">Runs</h2>', extra + '<h2 class="sec">Runs</h2>', 1
+    )
     return with_css(on_pass(page, n))
 
 
@@ -120,7 +123,7 @@ def app(state: Path, roster: tuple[Role, ...]) -> web.Application:
 
     async def roster_page(_: web.Request) -> web.Response:
         board = Board.open(state / f"pass-{last()}" / "board.json")
-        return web.Response(text=with_css(team(board, roster)), content_type="text/html")
+        return web.Response(text=with_css(team(board, roster, workspace=WORKSPACE)), content_type="text/html")
 
     async def css(_: web.Request) -> web.FileResponse:
         return web.FileResponse(CSS)

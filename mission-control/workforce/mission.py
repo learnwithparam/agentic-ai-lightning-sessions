@@ -41,7 +41,6 @@ from workforce.analyst import Desk, Reply, check_citations, search_docs, search_
 from workforce.board import Board, Card, Role, Run, price, serve, start
 from workforce.issues import Issues
 from workforce.sources import Readers, Source
-from workforce.telegram import Telegram
 
 MANAGER, RESOLVER, ANALYST = "Manager", "Support resolver", "Engineering analyst"
 EMPLOYEES = frozenset({MANAGER, RESOLVER, ANALYST})
@@ -88,19 +87,25 @@ class Shift(Desk):
 class Steps(RunHooks[Shift]):
     """Every handoff and tool call in one run, in order, for the card's page. Failed runs keep theirs."""
 
-    def __init__(self) -> None:
+    def __init__(self, narrate: Callable[[str], None] | None = None) -> None:
         self.seen: list[str] = []
         self.usage = Usage()
+        self.narrate = narrate
+
+    def add(self, line: str) -> None:
+        self.seen.append(line)
+        if self.narrate:
+            self.narrate(line)
 
     async def on_agent_start(self, context: RunContextWrapper[Shift], agent: Agent) -> None:
         # The run's running total, so a run the host cuts off still counts what it spent.
         self.usage = context.usage
 
     async def on_handoff(self, context: RunContextWrapper[Shift], from_agent: Agent, to_agent: Agent) -> None:
-        self.seen.append(f"{from_agent.name} handed the card to {to_agent.name}")
+        self.add(f"{from_agent.name} handed the card to {to_agent.name}")
 
     async def on_tool_start(self, context: RunContextWrapper[Shift], agent: Agent, tool: object) -> None:
-        self.seen.append(f"{agent.name} called {getattr(tool, 'name', tool)}")
+        self.add(f"{agent.name} called {getattr(tool, 'name', tool)}")
 
 
 def for_customer(text: str) -> str:
@@ -328,6 +333,11 @@ def paint(text: str, tone: str) -> str:
     return f"\033[{tone}m{text}\033[0m" if os.isatty(1) else text
 
 
+def narrate_to_terminal(line: str) -> None:
+    """One step as it happens, dim, so a room watching a long run sees it move."""
+    print(f"  {paint(line, '2')}", flush=True)
+
+
 def show(card: Card) -> None:
     """One card as the room reads it: the id and title, then where it went and why, wrapped short."""
     column, _, why = card.log[-1].partition(": ")
@@ -363,7 +373,7 @@ def on_board(state: Path) -> Approver:
     return wait
 
 
-async def demo(fresh: bool, ask: str = "telegram", port: int = 8080) -> None:
+async def demo(fresh: bool, ask: str = "terminal", port: int = 8080) -> None:
     if fresh:
         for f in ("board.json", "github.json"):
             (STATE / f).unlink(missing_ok=True)
@@ -371,10 +381,7 @@ async def demo(fresh: bool, ask: str = "telegram", port: int = 8080) -> None:
     if not board.cards:
         board.cards += [replace(c, runs=[], log=[], sources=[]) for c in (SEED, QUESTION)]
         board.save()
-    choices = {"telegram": Telegram.from_env(), "terminal": console, "board": on_board(STATE)}
-    approver = choices[ask] or console
-    if approver is console:
-        ask = "terminal"
+    approver = {"terminal": console, "board": on_board(STATE)}[ask]
     await start(STATE, TEAM, port)
     print(f"{paint('Mission Control', '1')} on {paint(f'http://127.0.0.1:{port}', '4')}")
     access = Access.from_env()
@@ -404,7 +411,7 @@ if __name__ == "__main__":
     cli.add_argument("--serve", action="store_true", help="serve the board on http://127.0.0.1:8080")
     cli.add_argument("--fresh", action="store_true", help="start over from the fixture issues and two cards")
     cli.add_argument(
-        "--ask", choices=("telegram", "terminal", "board"), default="telegram", help="where approval is asked"
+        "--ask", choices=("terminal", "board"), default="terminal", help="where approval is asked"
     )
     args = cli.parse_args()
     if args.serve:

@@ -1,5 +1,5 @@
 """The shift's promises: the real crew tools, maintenance system, tracer and budget, with a scripted model,
-a fake Langfuse and a fake Telegram.
+and a fake Langfuse.
 
 The scripted crew does what the prompts ask: triage reads the sensor, then books, joins or dismisses as
 its script names; the planner reads the manual and books. The fake Langfuse keeps the OTLP rows it is
@@ -272,8 +272,8 @@ def test_the_board_shows_spend_by_employee_the_alert_and_each_order(tmp_path, tr
     killed_shift(tmp_path, traced, sent)
     resumed(tmp_path, traced, sent)
     page = board.board_page(tmp_path)
-    assert "Spend by employee" in page and "Budget alert sent to Ingrid Halvorsen on Telegram" in page
-    assert "Workspace <b>Brekke Dairy</b>" in page
+    assert "Spend by employee" in page and "Budget alert for Ingrid Halvorsen on the board" in page
+    assert "Workspace <b>KaaS Dairy</b>" in page
     detail = board.card_page(tmp_path, "A-05")
     assert "WO-2001 in the maintenance system" in detail and "Alerts on this order: A-01, A-05" in detail
     assert "/project/mission-control/sessions/A-05" in detail

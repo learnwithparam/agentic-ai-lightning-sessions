@@ -26,7 +26,7 @@ from upkeep.cost import cost
 from upkeep.crew import TRIAGE, handle, model
 from upkeep.ledger import Get, Traced, langfuse, traces
 from upkeep.plant import ALERTS, MACHINES, ROOT, Cmms
-from workforce.board import Board, Card, Run, usd
+from workforce.board import Board, Card, Run, is_blank, usd
 from workforce.mission import paint
 
 STATE = ROOT / ".upkeep"
@@ -56,7 +56,7 @@ def seed(board: Board) -> None:
 def began(state: Path) -> str | None:
     """When this shift's board was seeded: Langfuse keeps every earlier shift's traces too."""
     f = state / "shift.json"
-    return json.loads(f.read_text())["started"] if f.exists() else None
+    return None if is_blank(f) else json.loads(f.read_text())["started"]
 
 
 def attempts(card: Card) -> int:
@@ -120,17 +120,8 @@ async def work(board: Board, cmms: Cmms, c: Card, m: Model | str, kill: Callable
     )
 
 
-def telegram() -> budget.Send:
-    from workforce.telegram import Telegram
-
-    tg = Telegram.from_env()
-    if not tg:
-        return lambda _: say("  No Telegram keys: the budget alert is on the board", "2")
-
-    def send(text: str) -> None:
-        tg.call("sendMessage", {"chat_id": tg.chat_id, "text": text})
-
-    return send
+def on_the_board(text: str) -> None:
+    say(f"  {text}", "1;33")
 
 
 async def shift(
@@ -148,7 +139,7 @@ async def shift(
         (state / "shift.json").write_text(json.dumps({"started": datetime.now(UTC).isoformat()}))
     seed(board)
     await recover(board, get, began(state), wait)
-    m, send = m or model(), send or telegram()
+    m, send = m or model(), send or on_the_board
     for c in board.cards:
         if c.column == "Done":
             continue

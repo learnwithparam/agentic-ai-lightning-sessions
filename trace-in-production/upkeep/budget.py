@@ -1,4 +1,4 @@
-"""The shift's budget: once the crew's spend passes it, one alert to the maintenance lead on Telegram.
+"""The shift's budget: once the crew's spend passes it, one alert to the maintenance lead on the board.
 
 Spend is every run on the board, killed runs included, priced from their traces. The alert is recorded
 only after it is sent, so a worker killed in between sends it again on resume: twice is a nuisance,
@@ -11,7 +11,7 @@ import json
 from collections.abc import Callable
 from pathlib import Path
 
-from workforce.board import Board, usd
+from workforce.board import Board, read_json, usd
 
 BUDGET = 0.001
 LEAD = "Ingrid Halvorsen"
@@ -45,7 +45,7 @@ def message(board: Board, spent: float) -> str:
 def check(board: Board, state: Path, send: Send) -> str | None:
     """The alert's text when this call sent it, else None: under budget, or already sent this shift."""
     f = state / "alerts.json"
-    sent = json.loads(f.read_text()) if f.exists() else {}
+    sent = read_json(f, {})
     spent = sum(c.cost for c in board.cards)
     if spent <= BUDGET or "budget" in sent:
         return None
@@ -58,4 +58,4 @@ def check(board: Board, state: Path, send: Send) -> str | None:
 
 def sent(state: Path) -> dict | None:
     f = state / "alerts.json"
-    return json.loads(f.read_text()).get("budget") if f.exists() else None
+    return read_json(f, {}).get("budget")

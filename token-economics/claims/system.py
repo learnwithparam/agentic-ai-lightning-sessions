@@ -18,7 +18,7 @@ from pathlib import Path
 from agents import Usage
 from pypdf import PdfReader
 
-from workforce.board import price
+from workforce.board import is_blank, price
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 DOCS = FIXTURES / "claims"
@@ -48,7 +48,7 @@ class Claims:
     @classmethod
     def open(cls, state: Path) -> Claims:
         db = state / "claims.json"
-        if not db.exists():
+        if is_blank(db):
             state.mkdir(parents=True, exist_ok=True)
             shutil.copy(FIXTURES / "claims.json", db)
         return cls(state)

@@ -15,6 +15,8 @@ import tomllib
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from workforce.board import is_blank
+
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURES = ROOT / "fixtures"
 PLANT = tomllib.loads((FIXTURES / "plant.toml").read_text())
@@ -46,7 +48,7 @@ class Cmms:
 
     @classmethod
     def open(cls, path: Path) -> Cmms:
-        if not path.exists():
+        if is_blank(path):
             return cls(path)
         raw = json.loads(path.read_text())
         orders = {o["id"]: Order(**o) for o in raw["orders"]}

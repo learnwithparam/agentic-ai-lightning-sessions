@@ -18,6 +18,7 @@ from upkeep.plant import MACHINES, PROCEDURES, Cmms
 from workforce.board import WEB, Board, Card, E, Role, detail, render, team, usd
 
 CSS = Path(__file__).resolve().parent.parent / "web" / "upkeep.css"
+WORKSPACE = "KaaS Dairy"
 TEAM = (
     Role(
         TRIAGE,
@@ -49,7 +50,7 @@ def spend_html(board: Board, state: Path) -> str:
     )
     spent, cap, alert = sum(c.cost for c in board.cards), usd(budget.BUDGET), budget.sent(state)
     status = (
-        f'<div class="verdict no"><b>Budget alert sent to {E(budget.LEAD)} on Telegram</b>'
+        f'<div class="verdict no"><b>Budget alert for {E(budget.LEAD)} on the board</b>'
         f"<span>{usd(alert['spent'])} spent when it went, over the {cap} budget.</span></div>"
         if alert
         else f'<div class="verdict ok"><b>Within budget</b><span>{usd(spent)} of {cap} spent.</span></div>'
@@ -79,20 +80,21 @@ def order_html(card: Card, cmms: Cmms) -> str:
 
 
 def dress(page: str) -> str:
-    """Mission Control's page in Brekke Dairy's workspace, with what this session adds to its styles."""
-    page = page.replace("Workspace <b>Acme</b>", "Workspace <b>Brekke Dairy</b>", 1)
+    """Mission Control's page in KaaS Dairy's workspace, with what this session adds to its styles."""
     return page.replace("</head>", '<link rel="stylesheet" href="/upkeep.css"></head>', 1)
 
 
 def board_page(state: Path) -> str:
     board = Board.open(state / "board.json")
-    page = render(board).replace('<div class="lanes">', spend_html(board, state) + '<div class="lanes">', 1)
+    page = render(board, workspace=WORKSPACE).replace(
+        '<div class="lanes">', spend_html(board, state) + '<div class="lanes">', 1
+    )
     return dress(page)
 
 
 def card_page(state: Path, card_id: str) -> str:
     card = Board.open(state / "board.json").card(card_id)
-    page = detail(card, None)
+    page = detail(card, None, workspace=WORKSPACE)
     extra = order_html(card, Cmms.open(state / "cmms.json"))
     page = page.replace('<h2 class="sec">Runs</h2>', extra + '<h2 class="sec">Runs</h2>', 1)
     return dress(page)
@@ -109,7 +111,7 @@ def app(state: Path) -> web.Application:
             raise web.HTTPNotFound() from None
 
     async def roster(_: web.Request) -> web.Response:
-        page = team(Board.open(state / "board.json"), TEAM)
+        page = team(Board.open(state / "board.json"), TEAM, workspace=WORKSPACE)
         return web.Response(text=dress(page), content_type="text/html")
 
     async def css(_: web.Request) -> web.FileResponse:

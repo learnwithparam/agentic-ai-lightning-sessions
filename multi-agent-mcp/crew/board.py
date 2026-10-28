@@ -9,8 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import html
-import os
-import sys
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
@@ -19,17 +17,23 @@ from aiohttp import web
 from crew.gateway import read_call_log, write_call_log_row
 from crew.travel import Refused, TicketStatus, Travel
 from workforce.board import CHECK, WEB, Board, Card, Role, chips, detail, render, team
-from workforce.people import COOKIE_NAME, People, Person
+from workforce.people import (
+    PERSON,
+    People,
+    Person,
+    html_response,
+    people_or_exit,
+    require_sign_in,
+    signed_in_html,
+)
 
 escape = html.escape
 ROOT = Path(__file__).resolve().parent.parent
 CSS = ROOT / "web" / "crew.css"
 PEOPLE_FILE = ROOT / "fixtures" / "people.json"
 WORKSPACE = "KaaS Travel"
-PUBLIC_PATHS = ("/login", "/crew.css")
-PUBLIC_FOLDERS = ("/static/", "/fonts/")
+PUBLIC_PATHS = ("/crew.css",)
 
-PERSON = web.RequestKey("person", Person)
 TASKS = web.AppKey("tasks", set)
 Resume = Callable[[Board, Card], Awaitable[Card]]
 
@@ -97,13 +101,6 @@ def approval_form_html(card: Card, ticket: dict, trip: dict) -> str:
     )
 
 
-def signed_in_html(person: Person) -> str:
-    return (
-        f'<span class="signed-in">Signed in as <b>{escape(person.name)}</b>, {escape(person.role)}</span>'
-        '<form method="post" action="/logout" class="sign-out"><button>Sign out</button></form>'
-    )
-
-
 def with_css(page: str) -> str:
     return page.replace("</head>", '<link rel="stylesheet" href="/crew.css"></head>', 1)
 
@@ -114,7 +111,12 @@ def card_page(state: Path, card_id: str, person: Person | None = None) -> str:
     travel = Travel(state)
     ticket = travel.ticket(card.id)
     trip = travel.trip() if ticket else {}
-    page = detail(card, None, WORKSPACE, signed_in_html(person) if person else "")
+    page = detail(
+        card,
+        None,
+        workspace=WORKSPACE,
+        signed_in=signed_in_html(person) if person else "",
+    )
     waiting = (
         ticket is not None and ticket["status"] == TicketStatus.WAITING_FOR_MANAGER
     )
@@ -126,23 +128,6 @@ def card_page(state: Path, card_id: str, person: Person | None = None) -> str:
         '<h2 class="sec">Runs</h2>', extra + '<h2 class="sec">Runs</h2>', 1
     )
     return with_css(page)
-
-
-def login_page(people: People, problem: str = "") -> str:
-    options = "".join(f"<option>{escape(name)}</option>" for name in people.names())
-    complaint = f'<p class="block">{escape(problem)}</p>' if problem else ""
-    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"><title>Sign in</title>
-<link rel="stylesheet" href="/static/base.css"><link rel="stylesheet" href="/static/board.css">
-<link rel="stylesheet" href="/crew.css"></head><body><main class="login">
-<h1 class="page">Sign in to {WORKSPACE}</h1>{complaint}
-<form method="post" action="/login"><label>Who are you<select name="name">{options}</select></label>
-<label>Passphrase<input type="password" name="passphrase" autocomplete="current-password"></label>
-<button>Sign in</button></form></main></body></html>"""
-
-
-def html_response(text: str) -> web.Response:
-    return web.Response(text=text, content_type="text/html")
 
 
 class BoardPages:
@@ -163,51 +148,27 @@ class BoardPages:
     def open_board(self) -> Board:
         return Board.open(self.state / "board.json")
 
-    @web.middleware
-    async def require_sign_in(self, request: web.Request, handler):
-        person = self.people.person_in_cookie(request.cookies.get(COOKIE_NAME))
-        request[PERSON] = person
-        is_public = request.path in PUBLIC_PATHS or request.path.startswith(
-            PUBLIC_FOLDERS
-        )
-        if person is None and not is_public:
-            raise web.HTTPSeeOther("/login")
-        return await handler(request)
-
-    async def login_form(self, _: web.Request) -> web.Response:
-        return html_response(login_page(self.people))
-
-    async def login(self, request: web.Request) -> web.Response:
-        form = await request.post()
-        name, passphrase = str(form.get("name", "")), str(form.get("passphrase", ""))
-        person = self.people.sign_in(name, passphrase)
-        if person is None:
-            problem = "That name and passphrase do not match."
-            return web.Response(
-                text=login_page(self.people, problem),
-                content_type="text/html",
-                status=401,
-            )
-        response = web.HTTPSeeOther("/")
-        cookie = self.people.sign_cookie(person)
-        response.set_cookie(COOKIE_NAME, cookie, httponly=True, samesite="Strict")
-        raise response
-
-    async def logout(self, _: web.Request) -> web.Response:
-        response = web.HTTPSeeOther("/login")
-        response.del_cookie(COOKIE_NAME)
-        raise response
-
     async def board_page(self, request: web.Request) -> web.Response:
         signed_in = signed_in_html(request[PERSON])
         return html_response(
-            with_css(render(self.open_board(), None, WORKSPACE, signed_in))
+            with_css(
+                render(
+                    self.open_board(), None, workspace=WORKSPACE, signed_in=signed_in
+                )
+            )
         )
 
     async def team_page(self, request: web.Request) -> web.Response:
         signed_in = signed_in_html(request[PERSON])
         return html_response(
-            with_css(team(self.open_board(), self.roster, WORKSPACE, signed_in))
+            with_css(
+                team(
+                    self.open_board(),
+                    self.roster,
+                    workspace=WORKSPACE,
+                    signed_in=signed_in,
+                )
+            )
         )
 
     async def card(self, request: web.Request) -> web.Response:
@@ -276,11 +237,9 @@ def app(
     state: Path, roster: tuple[Role, ...], people: People, resume: Resume | None = None
 ) -> web.Application:
     pages = BoardPages(state, roster, people, resume)
-    web_app = web.Application(middlewares=[pages.require_sign_in])
+    web_app = web.Application()
     web_app[TASKS] = set()
-    web_app.router.add_get("/login", pages.login_form)
-    web_app.router.add_post("/login", pages.login)
-    web_app.router.add_post("/logout", pages.logout)
+    require_sign_in(web_app, people, WORKSPACE, ("/crew.css",), PUBLIC_PATHS)
     web_app.router.add_get("/", pages.board_page)
     web_app.router.add_get("/team", pages.team_page)
     web_app.router.add_get("/cards/{id}", pages.card)
@@ -294,12 +253,7 @@ def app(
 def serve(state: Path, roster: tuple[Role, ...], port: int) -> None:
     from crew.team import resume_after_approval
 
-    secret = os.environ.get("BOARD_SECRET", "")
-    people = People(PEOPLE_FILE, secret)
-    if not secret or not people.names():
-        sys.exit(
-            "Set BOARD_SECRET and a BOARD_PASSPHRASE_* for each person in fixtures/people.json."
-        )
+    people = people_or_exit(PEOPLE_FILE)
 
     async def resume(board: Board, card: Card) -> Card:
         return await resume_after_approval(board, card, live=True)

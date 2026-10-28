@@ -10,9 +10,9 @@ carries the comment GitHub shows and who approved it.
 
 ```
 make check                         # lint and every step's test, offline: no keys, no spend
-cp .env.example .env               # then fill in the OpenRouter key, prices and Telegram bot
+cp .env.example .env               # then fill in the OpenRouter key and prices
 make demo FRESH=1 ASK=board        # work the board; approve the reply with the board's buttons
-make demo FRESH=1                  # the same, approving on Telegram
+make demo FRESH=1                  # the same, approving in the terminal
 make demo FRESH=1 ASK=terminal     # the same, approving in this terminal
 make board                         # the board on http://127.0.0.1:8080
 ```
@@ -56,9 +56,8 @@ make stack-check                             # the promise as a test, against th
 ```
 
 With the stack on, an approver counts only when `approvers` in `deploy/policy.json` maps their channel
-id to an OpenFGA user who can approve, such as `terminal:param` or `board:param`. Add a Telegram
-approver by numeric id: `MISSION_APPROVERS=telegram:123456789=param`. A Telegram username is never
-used, since anyone can take one. Without `STACK=1` the board runs exactly as in the Lightning session.
+id to an OpenFGA user who can approve, such as `terminal:param` or `board:param`. Add another
+approver with `MISSION_APPROVERS=board:sam=sam`. Without `STACK=1` the board runs exactly as in the Lightning session.
 
 Set `GITHUB_REPO` and `GITHUB_TOKEN` to post approved replies to a real repository; without them the
 replies go to the fixture copy under `.mission/`.
@@ -86,8 +85,8 @@ make ask Q="why does the CSV export time out?" AS=U_CONTRACTOR
 
 - `workforce/mission.py`: the manager, the support resolver, the analyst handoff and the
   maker-checker gate.
-- `workforce/board.py`, `workforce/issues.py`, `workforce/telegram.py`: the board and its pages, the
-  GitHub issues each card is checked against, and the Telegram approval.
+- `workforce/board.py`, `workforce/issues.py`: the board and its pages and the
+  GitHub issues each card is checked against.
 - `web/`: the board's styles and font.
 - `workforce/sources.py`, `workforce/analyst.py`, `workforce/slack_app.py`: the readers, the analyst
   and its citation check, and the Slack handler.

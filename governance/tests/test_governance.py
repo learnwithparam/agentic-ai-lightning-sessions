@@ -202,7 +202,7 @@ def test_the_policy_file_changes_what_the_employees_may_do(tmp_path, monkeypatch
 def test_the_board_team_and_month_pages_read_the_record(tmp_path):
     week(tmp_path)
     page = board.board_page(tmp_path)
-    assert page.count('class="decide"') == 3 and "Workspace <b>Halden Hotels</b>" in page
+    assert page.count('class="decide"') == 3 and "Workspace <b>KaaS Hotels</b>" in page
     assert "Rate manager asks: Bergen Sat 19 Dec: EUR 165 to 119" in page
     assert '<a href="/month">Month</a>' in page
     team = board.team_page(tmp_path)

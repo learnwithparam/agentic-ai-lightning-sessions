@@ -129,7 +129,7 @@ def test_the_card_is_done_only_when_a_ticket_lands_in_time_and_both_contacts_wer
     )
     assert page.count('<tr class="no">') == 1
     # The team page credits each of the three employees with the one Done card.
-    assert team(board, TEAM).count("<b>1</b> done of 1") == 3
+    assert team(board, TEAM, workspace="KaaS Travel").count("<b>1</b> done of 1") == 3
     # Every model call across the three employees counts toward the card's one cost.
     assert card.runs[0].cost == pytest.approx(
         len(model.calls) * (2000 + 200 * 10) / 1_000_000

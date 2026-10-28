@@ -21,6 +21,15 @@ from aiohttp import web
 COLUMNS = ("Backlog", "Needs you", "In flight", "Done")
 
 
+def is_blank(path: Path) -> bool:
+    """A missing or empty state file: a run that has not started, or one killed while it wrote."""
+    return not path.exists() or not path.read_text().strip()
+
+
+def read_json(path: Path, empty):
+    return empty if is_blank(path) else json.loads(path.read_text())
+
+
 def price(usage: Usage) -> float:
     """USD for one run, from the per-million-token prices in WORKFORCE_PRICE_IN and WORKFORCE_PRICE_OUT.
 
@@ -89,14 +98,15 @@ class Board:
 
     @classmethod
     def open(cls, path: Path) -> Board:
-        if not path.exists():
-            return cls(path)
-        rows = json.loads(path.read_text())
+        rows = read_json(path, [])
         return cls(path, [Card(**{**r, "runs": [Run(**x) for x in r["runs"]]}) for r in rows])
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps([asdict(c) for c in self.cards], indent=1))
+        # A reader never sees half a file: the temp file is complete before it takes the name.
+        pending = self.path.with_name(f"{self.path.name}.{os.getpid()}.tmp")
+        pending.write_text(json.dumps([asdict(c) for c in self.cards], indent=1))
+        os.replace(pending, self.path)
 
     def card(self, card_id: str) -> Card:
         return next(c for c in self.cards if c.id == card_id)
@@ -123,6 +133,7 @@ MARK = (
 )
 CHECK = '<svg class="ck" viewBox="0 0 16 16"><path d="M3 8.5 6.5 12 13 4.5"/></svg>'
 E = html.escape
+WORKSPACE = "KaaS"
 
 
 def usd(x: float) -> str:
@@ -160,20 +171,17 @@ def receipt(c: Card, comment: dict) -> str:
 
 def ask(c: Card, full: bool) -> str:
     p = c.pending
-    asked = {"board": "here", "telegram": "on Telegram", "terminal": "in the terminal"}
-    where = asked.get(p.get("asked"), "")
     text = p["body"] if full else p["body"][:160] + ("..." if len(p["body"]) > 160 else "")
     out = (
         f'<div class="ask"><b>Post this reply on GH#{p["issue"]}?</b><span>{E(text)}</span>'
         f'<div class="refs">Rests on {chips(p["rests_on"], "wait")}</div>'
-        f"<em>Drafted by {E(p['maker'])}{', waiting ' + where if where else ''}.</em>"
+        f"<em>Drafted by {E(p['maker'])}. Approve here.</em>"
     )
-    if p.get("asked") == "board":
-        out += (
-            f'<form method="post" action="/cards/{E(c.id)}/decide" class="decide">'
-            '<button class="btn dark" name="yes" value="1">Approve and post</button>'
-            '<button class="btn" name="yes" value="0">Decline</button></form>'
-        )
+    out += (
+        f'<form method="post" action="/cards/{E(c.id)}/decide" class="decide">'
+        '<button class="btn dark" name="yes" value="1">Approve and post</button>'
+        '<button class="btn" name="yes" value="0">Decline</button></form>'
+    )
     return out + "</div>"
 
 
@@ -202,7 +210,7 @@ def card_html(c: Card, replied: dict | None) -> str:
     return body
 
 
-def page(title: str, live: str, here: str, workspace: str = "Acme", signed_in: str = "") -> str:
+def page(title: str, live: str, here: str, *, workspace: str, signed_in: str = "") -> str:
     links = "".join(
         f'<a href="{href}"{" aria-current=page" if name == here else ""}>{name}</a>'
         for name, href in (("Board", "/"), ("Team", "/team"), ("Activity", "/#activity"))
@@ -213,18 +221,20 @@ def page(title: str, live: str, here: str, workspace: str = "Acme", signed_in: s
 <nav class="top"><a class="brand" href="/">{MARK}Mission Control</a>{links}<span class="grow"></span>
 <span class="tenant">Workspace <b>{E(workspace)}</b></span>{signed_in}</nav>
 <div id="live">{live}</div>
-<script>setInterval(async()=>{{try{{const t=await (await fetch(location.pathname)).text();
+<script>setInterval(async()=>{{try{{
+// Swapping an unchanged page, a page being typed in, or the buttons under the pointer eats the click.
+if(document.hidden||document.querySelector("form:focus-within,.decide:hover"))return;
+const t=await (await fetch(location.pathname)).text();
 const n=new DOMParser().parseFromString(t,"text/html").getElementById("live");
 const o=document.getElementById("live");
-// Swapping an unchanged page, or the buttons under the pointer, eats the click on Approve.
-if(n&&n.innerHTML!==o.innerHTML&&!document.querySelector(".decide:hover"))o.replaceWith(n)}}catch(e){{}}}},2000)
+if(n&&n.innerHTML!==o.innerHTML)o.replaceWith(n)}}catch(e){{}}}},2000)
 </script></body></html>"""
 
 
 Replies = dict[str, dict]
 
 
-def render(board: Board, replies: Replies | None = None, workspace: str = "Acme", signed_in: str = "") -> str:
+def render(board: Board, replies: Replies | None = None, *, workspace: str, signed_in: str = "") -> str:
     replies = replies or {}
     lanes = ""
     for name in COLUMNS:
@@ -259,10 +269,10 @@ def render(board: Board, replies: Replies | None = None, workspace: str = "Acme"
 <table class="tbl"><thead><tr><th>Card</th><th>Employee</th><th class="n hide">Tokens in</th>
 <th class="n hide">Tokens out</th><th class="n">Cost</th><th>Result</th><th class="hide">Said</th>
 </tr></thead><tbody>{log}</tbody></table></div>"""
-    return page("Mission Control", live, "Board", workspace, signed_in)
+    return page("Mission Control", live, "Board", workspace=workspace, signed_in=signed_in)
 
 
-def detail(c: Card, replied: dict | None, workspace: str = "Acme", signed_in: str = "") -> str:
+def detail(c: Card, replied: dict | None, *, workspace: str, signed_in: str = "") -> str:
     """One card: where it stands, every run with its steps and cost, and what closed it."""
     runs = (
         "".join(
@@ -292,10 +302,10 @@ def detail(c: Card, replied: dict | None, workspace: str = "Acme", signed_in: st
 <div class="stat"><span>Cost</span><b>{usd(c.cost)}</b><em>failed runs included</em></div></div>
 {closed}<h2 class="sec">Runs</h2><ol class="runs">{runs}</ol>
 <h2 class="sec">Timeline</h2><ol class="timeline">{timeline}</ol></div>"""
-    return page(c.title, live, "", workspace, signed_in)
+    return page(c.title, live, "", workspace=workspace, signed_in=signed_in)
 
 
-def team(board: Board, roster: tuple[Role, ...], workspace: str = "Acme", signed_in: str = "") -> str:
+def team(board: Board, roster: tuple[Role, ...], *, workspace: str, signed_in: str = "") -> str:
     """Every AI employee: what it is hired for, what it must never do, and what its outcomes cost."""
     rows = ""
     for r in roster:
@@ -315,7 +325,7 @@ def team(board: Board, roster: tuple[Role, ...], workspace: str = "Acme", signed
     live = f"""<div class="wrap tight"><div class="head"><div><h1 class="page">Team</h1>
 <p>Each AI employee is hired for one outcome and has one thing it must never do. A test holds each line.</p>
 </div></div><div class="roster">{rows}</div></div>"""
-    return page("Team", live, "Team", workspace, signed_in)
+    return page("Team", live, "Team", workspace=workspace, signed_in=signed_in)
 
 
 def app(state: Path, roster: tuple[Role, ...]) -> web.Application:
@@ -327,7 +337,8 @@ def app(state: Path, roster: tuple[Role, ...]) -> web.Application:
         return board, replies
 
     async def index(_: web.Request) -> web.Response:
-        return web.Response(text=render(*read()), content_type="text/html")
+        board, replies = read()
+        return web.Response(text=render(board, replies, workspace=WORKSPACE), content_type="text/html")
 
     async def one(req: web.Request) -> web.Response:
         board, replies = read()
@@ -335,10 +346,10 @@ def app(state: Path, roster: tuple[Role, ...]) -> web.Application:
             c = board.card(req.match_info["id"])
         except StopIteration:
             raise web.HTTPNotFound() from None
-        return web.Response(text=detail(c, replies.get(c.id)), content_type="text/html")
+        return web.Response(text=detail(c, replies.get(c.id), workspace=WORKSPACE), content_type="text/html")
 
     async def roster_page(_: web.Request) -> web.Response:
-        return web.Response(text=team(read()[0], roster), content_type="text/html")
+        return web.Response(text=team(read()[0], roster, workspace=WORKSPACE), content_type="text/html")
 
     async def decide(req: web.Request) -> web.Response:
         # The page only records the click; mission.on_board hands it to decide, which holds the rule.
