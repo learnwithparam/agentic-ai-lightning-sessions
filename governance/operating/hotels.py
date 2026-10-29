@@ -1,7 +1,7 @@
-"""Halden Hotels' systems of record: the rate system, purchasing and the rota.
+"""KaaS Hotels' systems of record: the rate system, purchasing and the rota.
 
 Every write carries its job's card id, and a second write for the same card hands back the first, so a
-retried run changes nothing twice. `writes` lists every change in the order it landed; `make record`
+retried run changes nothing twice. `writes` lists every change in the order it landed; `make decisions`
 checks it against the decision record, because a write the record does not hold is one no policy allowed.
 """
 
@@ -31,22 +31,22 @@ def day(iso: str) -> str:
 
 
 def clock(start: str, end: str) -> str:
-    a, b = datetime.fromisoformat(start), datetime.fromisoformat(end)
-    return f"{a:%a %-d %b} {a:%H:%M} to {b:%H:%M}"
+    begin, finish = datetime.fromisoformat(start), datetime.fromisoformat(end)
+    return f"{begin:%a %-d %b} {begin:%H:%M} to {finish:%H:%M}"
 
 
 def town(hotel: str) -> str:
-    return HOTELS[hotel]["name"].removeprefix("Halden ")
+    return HOTELS[hotel]["name"].replace("KaaS ", "")
 
 
-def describe(a: dict) -> str:
+def describe(action: dict) -> str:
     """One action as the record, the board and the terminal print it."""
-    if a["kind"] == "price":
-        return f"{town(a['hotel'])} {day(a['night'])}: EUR {a['was']} to {a['price']}"
-    if a["kind"] == "order":
-        item = HOTELS[a["hotel"]]["stock"][a["item"]]["item"].split(",")[0]
-        return f"{a['quantity']} {item}, {a['supplier']}, EUR {a['total']:,.0f}"
-    return f"{a['staff']}, {clock(a['start'], a['end'])}"
+    if action["kind"] == "price":
+        return f"{town(action['hotel'])} {day(action['night'])}: EUR {action['was']} to {action['price']}"
+    if action["kind"] == "order":
+        item = HOTELS[action["hotel"]]["stock"][action["item"]]["item"].split(",")[0]
+        return f"{action['quantity']} {item}, {action['supplier']}, EUR {action['total']:,.0f}"
+    return f"{action['staff']}, {clock(action['start'], action['end'])}"
 
 
 @dataclass
@@ -59,7 +59,9 @@ class Systems:
 
     @classmethod
     def open(cls, path: Path) -> Systems:
-        return cls(path) if is_blank(path) else cls(path, **json.loads(path.read_text()))
+        return (
+            cls(path) if is_blank(path) else cls(path, **json.loads(path.read_text()))
+        )
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -68,35 +70,51 @@ class Systems:
         self.path.write_text(json.dumps(rows, indent=1))
 
     def price(self, hotel: str, night: str) -> int:
-        return self.prices.get(f"{hotel} {night}", HOTELS[hotel]["nights"][night]["price"])
+        return self.prices.get(
+            f"{hotel} {night}", HOTELS[hotel]["nights"][night]["price"]
+        )
 
     def staff(self, hotel: str) -> list[dict]:
         return [
-            {**s, "shifts": s["shifts"] + self.shifts.get(f"{hotel} {s['name']}", [])}
-            for s in HOTELS[hotel]["staff"]
+            {
+                **member,
+                "shifts": member["shifts"]
+                + self.shifts.get(f"{hotel} {member['name']}", []),
+            }
+            for member in HOTELS[hotel]["staff"]
         ]
 
     def written(self, card: str) -> dict | None:
-        return next((w for w in self.writes if w["card"] == card), None)
+        return next((write for write in self.writes if write["card"] == card), None)
 
-    def apply(self, card: str, a: dict) -> tuple[str, str]:
+    def apply(self, card: str, action: dict) -> tuple[str, str]:
         """Write the action; the card's first write is handed back if it already landed."""
-        if held := self.written(card):
+        held = self.written(card)
+        if held:
             return held["ref"], "already"
-        if a["kind"] == "price":
-            if a["price"] <= 0:
+        if action["kind"] == "price":
+            if action["price"] <= 0:
                 raise Refused("a price must be above zero")
-            self.prices[f"{a['hotel']} {a['night']}"] = a["price"]
-            ref = f"Rate {day(a['night'])}"
-        elif a["kind"] == "order":
-            if a["supplier"] not in SUPPLIERS[a["item"]]:
-                raise Refused(f"{a['supplier']} does not sell this item")
+            self.prices[f"{action['hotel']} {action['night']}"] = action["price"]
+            ref = f"Rate {day(action['night'])}"
+        elif action["kind"] == "order":
+            if action["supplier"] not in SUPPLIERS[action["item"]]:
+                raise Refused(f"{action['supplier']} does not sell this item")
             ref = f"PO-{3001 + len(self.orders)}"
-            self.orders[ref] = {"card": card, **a}
+            self.orders[ref] = {"card": card, **action}
         else:
-            self.shifts.setdefault(f"{a['hotel']} {a['staff']}", []).append([a["start"], a["end"]])
-            ref = f"Rota {day(a['start'])}"
-        self.writes.append({"card": card, "system": SYSTEM[a["kind"]], "ref": ref, "action": a})
+            self.shifts.setdefault(f"{action['hotel']} {action['staff']}", []).append(
+                [action["start"], action["end"]]
+            )
+            ref = f"Rota {day(action['start'])}"
+        self.writes.append(
+            {
+                "card": card,
+                "system": SYSTEM[action["kind"]],
+                "ref": ref,
+                "action": action,
+            }
+        )
         self.save()
         return ref, "written"
 

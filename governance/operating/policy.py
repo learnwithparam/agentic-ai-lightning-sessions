@@ -16,7 +16,7 @@ from operating.hotels import HOTELS, ROOT
 
 POLICY = tomllib.loads((ROOT / "fixtures" / "policy.toml").read_text())
 AGENTS: dict[str, dict] = POLICY["agents"]
-NAMES = {a["name"] for a in AGENTS.values()}
+NAMES = {employee["name"] for employee in AGENTS.values()}
 
 
 @dataclass(frozen=True)
@@ -35,59 +35,111 @@ def first(name: str) -> str:
     return name.split(",")[0]
 
 
+def key_of(name: str) -> str:
+    """The policy key of the AI employee with this display name."""
+    for key, employee in AGENTS.items():
+        if employee["name"] == name:
+            return key
+    raise KeyError(name)
+
+
+def signs_for(key: str) -> str:
+    """What this employee's signer signs, in the words a refusal prints."""
+    rule = AGENTS[key]
+    if key == "rates":
+        return f"a rate change over {rule['change_alone']}%"
+    if key == "supplies":
+        return f"an order over EUR {rule['spend_alone']}"
+    return "a change to a published rota"
+
+
 def start(key: str, spent: float) -> Verdict | None:
     """Whether this employee may run at all; None when it may."""
-    a = AGENTS[key]
-    if a["status"] != "running":
-        return Verdict("refuse", f"RUN-1: paused by {first(a['owner'])}, {a['paused_because']}")
-    if spent >= a["cap"]:
-        return Verdict("refuse", f"RUN-2: the {a['name']} has spent its ${a['cap']:.2f} AI budget this month")
+    employee = AGENTS[key]
+    if employee["status"] != "running":
+        why = employee["paused_because"]
+        return Verdict("refuse", f"RUN-1: paused by {first(employee['owner'])}, {why}")
+    if spent >= employee["cap"]:
+        budget = f"${employee['cap']:.2f}"
+        return Verdict(
+            "refuse",
+            f"RUN-2: the {employee['name']} has spent its {budget} AI budget this month",
+        )
     return None
 
 
-def check(key: str, a: dict, shifts: list[list[str]] = ()) -> Verdict:
-    """The verdict on one action; `shifts` are the staff member's shifts already on the rota."""
+def price_verdict(key: str, action: dict) -> Verdict:
     rule = AGENTS[key]
-    if a["kind"] == "price":
-        floor = HOTELS[a["hotel"]]["nights"][a["night"]]["floor"]
-        if a["price"] < floor:
-            return Verdict("refuse", f"RATE-1: EUR {a['price']} is under this night's floor of EUR {floor}")
-        moved = abs(a["price"] - a["was"]) / a["was"] * 100
-        if moved > rule["change_alone"]:
-            who = signer(key, a["hotel"])
-            why = (
-                f"RATE-2: a move over {rule['change_alone']}% is signed by {first(who)}; this is {moved:.0f}%"
-            )
-            return Verdict("sign", why, who)
-        return Verdict("allow", f"RATE-2: a move of {moved:.0f}% is within {rule['change_alone']}%")
-    if a["kind"] == "order":
-        if a["supplier"] not in rule["suppliers"]:
-            return Verdict("refuse", f"BUY-1: {a['supplier']} is not an approved supplier")
-        if a["total"] > rule["spend_alone"]:
-            who = signer(key, a["hotel"])
-            why = f"BUY-2: an order over EUR {rule['spend_alone']} is signed by {first(who)}"
-            return Verdict("sign", why, who)
-        return Verdict("allow", f"BUY-2: EUR {a['total']:,.0f} is within EUR {rule['spend_alone']}")
-    start_at, end_at = datetime.fromisoformat(a["start"]), datetime.fromisoformat(a["end"])
-    for s, e in shifts:
-        before = (start_at - datetime.fromisoformat(e)).total_seconds() / 3600
-        after = (datetime.fromisoformat(s) - end_at).total_seconds() / 3600
+    floor = HOTELS[action["hotel"]]["nights"][action["night"]]["floor"]
+    if action["price"] < floor:
+        return Verdict(
+            "refuse",
+            f"RATE-1: EUR {action['price']} is under this night's floor of EUR {floor}",
+        )
+    moved = abs(action["price"] - action["was"]) / action["was"] * 100
+    if moved > rule["change_alone"]:
+        who = signer(key, action["hotel"])
+        why = f"RATE-2: a move over {rule['change_alone']}% is signed by {first(who)}; this is {moved:.0f}%"
+        return Verdict("sign", why, who)
+    return Verdict(
+        "allow", f"RATE-2: a move of {moved:.0f}% is within {rule['change_alone']}%"
+    )
+
+
+def order_verdict(key: str, action: dict) -> Verdict:
+    rule = AGENTS[key]
+    if action["supplier"] not in rule["suppliers"]:
+        return Verdict(
+            "refuse", f"BUY-1: {action['supplier']} is not an approved supplier"
+        )
+    if action["total"] > rule["spend_alone"]:
+        who = signer(key, action["hotel"])
+        return Verdict(
+            "sign",
+            f"BUY-2: an order over EUR {rule['spend_alone']} is signed by {first(who)}",
+            who,
+        )
+    return Verdict(
+        "allow",
+        f"BUY-2: EUR {action['total']:,.0f} is within EUR {rule['spend_alone']}",
+    )
+
+
+def shift_verdict(key: str, action: dict, shifts: list[list[str]]) -> Verdict:
+    rule = AGENTS[key]
+    start_at = datetime.fromisoformat(action["start"])
+    end_at = datetime.fromisoformat(action["end"])
+    for shift_start, shift_end in shifts:
+        before = (start_at - datetime.fromisoformat(shift_end)).total_seconds() / 3600
+        after = (datetime.fromisoformat(shift_start) - end_at).total_seconds() / 3600
         rest = max(before, after)
         if rest < rule["rest_hours"]:
             hours = f"{max(rest, 0):.0f} h; the rule is {rule['rest_hours']} h"
-            why = f"ROTA-1: {first(a['staff'])} would rest {hours}"
-            return Verdict("refuse", why)
-    who = signer(key, a["hotel"])
-    return Verdict("sign", f"ROTA-2: a change to a published rota is signed by {first(who)}", who)
+            return Verdict(
+                "refuse", f"ROTA-1: {first(action['staff'])} would rest {hours}"
+            )
+    who = signer(key, action["hotel"])
+    return Verdict(
+        "sign", f"ROTA-2: a change to a published rota is signed by {first(who)}", who
+    )
+
+
+def check(key: str, action: dict, shifts: list[list[str]] = ()) -> Verdict:
+    """The verdict on one action; `shifts` are the staff member's shifts already on the rota."""
+    if action["kind"] == "price":
+        return price_verdict(key, action)
+    if action["kind"] == "order":
+        return order_verdict(key, action)
+    return shift_verdict(key, action, shifts)
 
 
 def alone(key: str) -> str:
     """What the employee may do without a signature, in the words the Team page prints."""
-    a = AGENTS[key]
-    if a["status"] != "running":
-        return f"Nothing while paused: {a['paused_because']}"
+    employee = AGENTS[key]
+    if employee["status"] != "running":
+        return f"Nothing while paused: {employee['paused_because']}"
     if key == "rates":
-        return f"Move a night's price up to {a['change_alone']}%, never under the hotel's floor"
+        return f"Move a night's price up to {employee['change_alone']}%, never under the hotel's floor"
     if key == "supplies":
-        return f"Order up to EUR {a['spend_alone']} from the {len(a['suppliers'])} approved suppliers"
-    return f"Nothing: every rota change is signed, and {a['rest_hours']} h rest between shifts always holds"
+        return f"Order up to EUR {employee['spend_alone']} from the {len(employee['suppliers'])} approved suppliers"
+    return f"Nothing: every rota change is signed, and {employee['rest_hours']} h rest between shifts always holds"

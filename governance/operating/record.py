@@ -21,17 +21,38 @@ class Record:
         self.path = path
 
     def add(
-        self, card: str, agent: str, action: str, verdict: str, rule: str, by: str, signer: str = ""
+        self,
+        card: str,
+        agent: str,
+        action: str,
+        verdict: str,
+        rule: str,
+        decider: str,
+        signer: str = "",
     ) -> None:
         assert verdict in VERDICTS, verdict
-        row = {"at": datetime.now(UTC).isoformat(timespec="seconds"), "card": card, "agent": agent}
-        row |= {"action": action, "verdict": verdict, "rule": rule, "by": by, "signer": signer}
+        row = {
+            "at": datetime.now(UTC).isoformat(timespec="seconds"),
+            "card": card,
+            "agent": agent,
+        }
+        row |= {
+            "action": action,
+            "verdict": verdict,
+            "rule": rule,
+            "by": decider,
+            "signer": signer,
+        }
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("a") as f:
-            f.write(json.dumps(row) + "\n")
+        with self.path.open("a") as log:
+            log.write(json.dumps(row) + "\n")
 
     def rows(self) -> list[dict]:
-        return [json.loads(line) for line in self.path.read_text().splitlines()] if self.path.exists() else []
+        return (
+            [json.loads(line) for line in self.path.read_text().splitlines()]
+            if self.path.exists()
+            else []
+        )
 
-    def of(self, card: str) -> list[dict]:
-        return [r for r in self.rows() if r["card"] == card]
+    def for_card(self, card: str) -> list[dict]:
+        return [row for row in self.rows() if row["card"] == card]

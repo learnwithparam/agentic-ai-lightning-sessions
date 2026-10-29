@@ -1,9 +1,10 @@
 """The week: every job on the board worked by its AI employee, under the operations director's policy.
 
-`make week` starts from a fresh board and prints each verdict as it lands: allowed, refused with its
-rule, waiting for a named signer, or not started. The signer answers on the board, which writes the
-action only on a yes. `make record` checks every write in the systems of record against the decision
-record: one row that allowed or signed it, or the write had no owner.
+`make demo` starts from a fresh board and prints each verdict as it lands: allowed, refused with its
+rule, waiting for a named signer, or not started. The signer, signed in on the board, answers there; the
+action is written only on a yes. `make decisions` checks every write in the systems of record against the
+decision record: one row that allowed or signed it, or the write had no owner. `make naive` shows the
+same write with the gate off.
 """
 
 from __future__ import annotations
@@ -12,7 +13,9 @@ import argparse
 import asyncio
 import json
 import shutil
+from collections.abc import Callable
 from pathlib import Path
+from typing import NamedTuple
 
 from agents import Model, set_tracing_disabled
 
@@ -21,13 +24,21 @@ from operating.cost import cost
 from operating.crew import handle, model
 from operating.hotels import HOTELS, JOBS, ROOT, Systems, describe, town
 from operating.record import Record
+from operating.scripted import price_under_the_floor
 from workforce.board import Board, Card, Run, read_json, usd
-from workforce.mission import paint
+from workforce.mission import narrate_to_terminal, paint
 
-STATE = ROOT / ".halden"
+STATE = ROOT / ".hotels"
+NAIVE_STATE = ROOT / ".hotels-naive"
 # A terminal the room can read from the back holds about 76 columns.
 WIDTH = 76
-TONE = {"allowed": "1;32", "signed": "1;32", "asked": "1;33", "declined": "1;33", "refused": "1;31"}
+TONE = {
+    "allowed": "1;32",
+    "signed": "1;32",
+    "asked": "1;33",
+    "declined": "1;33",
+    "refused": "1;31",
+}
 WORD = {"asked": "asks", "not started": "stopped"}
 
 
@@ -43,8 +54,14 @@ def say(text: str, tone: str = "0") -> None:
     print(paint(fit(text, WIDTH), tone), flush=True)
 
 
-def opened(state: Path) -> tuple[Board, Systems, Record]:
-    return (
+class Desk(NamedTuple):
+    board: Board
+    systems: Systems
+    record: Record
+
+
+def opened(state: Path) -> Desk:
+    return Desk(
         Board.open(state / "board.json"),
         Systems.open(state / "systems.json"),
         Record(state / "record.jsonl"),
@@ -55,27 +72,28 @@ def seed(board: Board) -> None:
     if not board.cards:
         board.cards = [
             Card(
-                j["id"],
-                f"{HOTELS[j['hotel']]['name']}: {j['says']}",
-                HOTELS[j["hotel"]]["name"],
-                town(j["hotel"]),
+                spec["id"],
+                f"{HOTELS[spec['hotel']]['name']}: {spec['says']}",
+                HOTELS[spec["hotel"]]["name"],
+                town(spec["hotel"]),
             )
-            for j in JOBS
+            for spec in JOBS
         ]
         board.save()
 
 
 def job(card_id: str) -> dict:
-    return next(j for j in JOBS if j["id"] == card_id)
+    return next(spec for spec in JOBS if spec["id"] == card_id)
 
 
 def spent(board: Board, name: str) -> float:
-    return sum(r.cost for c in board.cards for r in c.runs if r.employee == name)
+    return sum(
+        run.cost for card in board.cards for run in card.runs if run.employee == name
+    )
 
 
 def waiting(state: Path) -> dict[str, dict]:
-    f = state / "waiting.json"
-    return read_json(f, {})
+    return read_json(state / "waiting.json", {})
 
 
 def hold(state: Path, rows: dict[str, dict]) -> None:
@@ -83,145 +101,279 @@ def hold(state: Path, rows: dict[str, dict]) -> None:
 
 
 def show(row: dict) -> None:
-    v = row["verdict"]
-    say(f"      {WORD.get(v, v):<9} {row['action']}", TONE.get(v, "1;31"))
-    if v != "allowed":
+    verdict = row["verdict"]
+    say(
+        f"      {WORD.get(verdict, verdict):<9} {row['action']}",
+        TONE.get(verdict, "1;31"),
+    )
+    if verdict != "allowed":
         say(f"          {row['rule']}", "2")
 
 
-async def work(state: Path, board: Board, systems: Systems, record: Record, c: Card, m: Model | str) -> None:
-    j = job(c.id)
-    key, name = j["agent"], policy.AGENTS[j["agent"]]["name"]
-    c.employee = name
-    stop = policy.start(key, spent(board, name))
+async def work(
+    state: Path,
+    desk: Desk,
+    card: Card,
+    the_model: Model | str,
+    narrate: Callable[[str], None] | None = None,
+) -> None:
+    spec = job(card.id)
+    key, name = spec["agent"], policy.AGENTS[spec["agent"]]["name"]
+    card.employee = name
+    stop = policy.start(key, spent(desk.board, name))
     if stop:
-        record.add(c.id, name, j["says"], "not started", stop.rule, by="policy")
+        desk.record.add(
+            card.id, name, spec["says"], "not started", stop.rule, decider="policy"
+        )
     else:
-        board.move(c, "In flight", "run started")
-        w = await handle(j, systems, record, m)
-        for who, (i, o) in w.usage.items():
-            note = w.did or w.error or "The employee did not act on it"
-            c.runs.append(Run(who, i, o, cost(i, o), bool(w.did), note, w.steps.get(who, [])))
-    say(f"{c.id}  {name}, {c.customer}".ljust(WIDTH - 9) + f"{usd(c.cost):>9}", "1;36")
-    for row in record.of(c.id):
+        desk.board.move(card, "In flight", "run started")
+        result = await handle(spec, desk.systems, desk.record, the_model, narrate)
+        for who, (tokens_in, tokens_out) in result.usage.items():
+            note = result.did or result.error or "The employee did not act on it"
+            steps = result.steps.get(who, [])
+            card.runs.append(
+                Run(
+                    who,
+                    tokens_in,
+                    tokens_out,
+                    cost(tokens_in, tokens_out),
+                    bool(result.did),
+                    note,
+                    steps,
+                )
+            )
+    say(
+        f"{card.id}  {name}, {card.customer}".ljust(WIDTH - 9) + f"{usd(card.cost):>9}",
+        "1;36",
+    )
+    for row in desk.record.for_card(card.id):
         show(row)
     if stop:
-        board.move(c, "Needs you", stop.rule)
-    elif w.waiting:
-        hold(state, waiting(state) | {c.id: w.waiting})
-        board.move(c, "Needs you", f"waiting for {w.waiting['signer']}: {w.waiting['rule']}")
-    elif held := systems.written(c.id):
-        c.issue = f"{town(j['hotel'])}, {held['ref']}"
-        board.move(c, "Done", f"allowed by policy: {w.did}")
+        desk.board.move(card, "Needs you", stop.rule)
+    elif result.waiting:
+        hold(state, waiting(state) | {card.id: result.waiting})
+        desk.board.move(
+            card,
+            "Needs you",
+            f"waiting for {result.waiting['signer']}: {result.waiting['rule']}",
+        )
+    elif desk.systems.written(card.id):
+        held = desk.systems.written(card.id)
+        card.issue = f"{town(spec['hotel'])}, {held['ref']}"
+        desk.board.move(card, "Done", f"allowed by policy: {result.did}")
     else:
-        board.move(c, "Needs you", w.error or "the employee did not act on it")
+        desk.board.move(
+            card, "Needs you", result.error or "the employee did not act on it"
+        )
 
 
-async def week(state: Path = STATE, m: Model | str | None = None) -> Board:
-    board, systems, record = opened(state)
-    seed(board)
-    m = m or model()
-    for c in board.cards:
-        if c.column == "Backlog":
-            await work(state, board, systems, record, c, m)
-    rows = record.rows()
-    alone = sum(r["verdict"] == "allowed" for r in rows)
+async def week(
+    state: Path = STATE,
+    the_model: Model | str | None = None,
+    narrate: Callable[[str], None] | None = None,
+) -> Board:
+    desk = opened(state)
+    seed(desk.board)
+    the_model = the_model or model()
+    for card in desk.board.cards:
+        if card.column == "Backlog":
+            await work(state, desk, card, the_model, narrate)
+    rows = desk.record.rows()
+    alone = sum(row["verdict"] == "allowed" for row in rows)
     asked = len(waiting(state))
-    stopped = sum(r["verdict"] == "not started" for r in rows)
-    say(f"{alone} done alone, {asked} waiting for a signature, {stopped} not started", "1;36")
-    say(f"AI spend this week {usd(sum(c.cost for c in board.cards))}", "1;36")
-    return board
+    stopped = sum(row["verdict"] == "not started" for row in rows)
+    say(
+        f"{alone} done alone, {asked} waiting for a signature, {stopped} not started",
+        "1;36",
+    )
+    say(
+        f"AI spend this week {usd(sum(card.cost for card in desk.board.cards))}", "1;36"
+    )
+    return desk.board
 
 
-def sign(state: Path, card_id: str, by: str, yes: bool) -> Card:
-    """The named signer's answer. The action is written only on a yes, and no AI employee may answer."""
-    if by in policy.NAMES:
-        raise NotAllowed(f"{by} is an AI employee and may not sign")
+def sign(state: Path, card_id: str, person: str, yes: bool) -> Card:
+    """The named signer's answer. The action is written only on a yes, and only that person may give one."""
+    if person in policy.NAMES:
+        raise NotAllowed(f"{person} is an AI employee and may not sign")
     rows = waiting(state)
     if card_id not in rows:
         raise NotAllowed("nothing is waiting for a signature on this card")
-    w = rows.pop(card_id)
-    board, systems, record = opened(state)
-    c = board.card(card_id)
-    said = describe(w["action"])
-    record.add(
-        card_id, w["agent"], said, "signed" if yes else "declined", w["rule"], by=by, signer=w["signer"]
+    held = rows[card_id]
+    desk = opened(state)
+    card = desk.board.card(card_id)
+    said = describe(held["action"])
+    signer = policy.first(held["signer"])
+    if person != signer:
+        rule = policy.signs_for(policy.key_of(held["agent"]))
+        refusal = f"{person} may not sign this: only {signer} signs {rule}"
+        desk.record.add(
+            card_id,
+            held["agent"],
+            said,
+            "refused",
+            refusal,
+            decider=person,
+            signer=held["signer"],
+        )
+        desk.board.move(card, card.column, f"refused: {refusal}")
+        raise NotAllowed(refusal)
+    del rows[card_id]
+    verdict = "signed" if yes else "declined"
+    desk.record.add(
+        card_id,
+        held["agent"],
+        said,
+        verdict,
+        held["rule"],
+        decider=person,
+        signer=held["signer"],
     )
     hold(state, rows)
-    who = policy.first(w["signer"])
     if yes:
-        ref, _ = systems.apply(card_id, w["action"])
-        c.issue = f"{town(w['action']['hotel'])}, {ref}"
-        board.move(c, "Done", f"signed for {who} by {by}: {said}")
+        ref, _ = desk.systems.apply(card_id, held["action"])
+        card.issue = f"{town(held['action']['hotel'])}, {ref}"
+        desk.board.move(card, "Done", f"signed for {signer} by {person}: {said}")
     else:
-        board.move(c, "Backlog", f"declined for {who} by {by}; nothing was written")
-    return c
+        desk.board.move(card, "Done", f"declined by {person}; nothing was written")
+    return card
 
 
 def check(state: Path) -> list[tuple[str, bool]]:
     """Every write in the systems against the record: exactly one row allowed or signed it, and back."""
-    _, systems, record = opened(state)
-    owned = [r for r in record.rows() if r["verdict"] in ("allowed", "signed")]
-    out = []
-    for w in systems.writes:
-        said = describe(w["action"])
-        mine = [r for r in owned if r["card"] == w["card"] and r["action"] == said]
-        how = mine[0]["verdict"] if len(mine) == 1 else "NO RECORD" if not mine else "TWICE"
-        out.append((f"  {w['card']}  {w['system']:<10} {said:<40} {how}", len(mine) == 1))
-    landed = {(w["card"], describe(w["action"])) for w in systems.writes}
-    for r in owned:
-        if (r["card"], r["action"]) not in landed:
-            out.append((f"  {r['card']}  {'none':<10} {r['action']:<40} NOT WRITTEN", False))
-    return out
+    desk = opened(state)
+    owned = [
+        row for row in desk.record.rows() if row["verdict"] in ("allowed", "signed")
+    ]
+    lines = []
+    for write in desk.systems.writes:
+        said = describe(write["action"])
+        mine = [
+            row
+            for row in owned
+            if row["card"] == write["card"] and row["action"] == said
+        ]
+        how = (
+            mine[0]["verdict"]
+            if len(mine) == 1
+            else "NO RECORD"
+            if not mine
+            else "TWICE"
+        )
+        lines.append(
+            (
+                f"  {write['card']}  {write['system']:<10} {said:<40} {how}",
+                len(mine) == 1,
+            )
+        )
+    landed = {
+        (write["card"], describe(write["action"])) for write in desk.systems.writes
+    }
+    for row in owned:
+        if (row["card"], row["action"]) not in landed:
+            lines.append(
+                (
+                    f"  {row['card']}  {'none':<10} {row['action']:<40} NOT WRITTEN",
+                    False,
+                )
+            )
+    declined = [row for row in desk.record.rows() if row["verdict"] == "declined"]
+    for row in declined:
+        if (row["card"], row["action"]) in landed:
+            lines.append(
+                (
+                    f"  {row['card']}  {'none':<10} {row['action']:<40} DECLINED BUT WRITTEN",
+                    False,
+                )
+            )
+    return lines
 
 
 def month(state: Path) -> list[dict]:
     """Per employee: what it did alone, what was signed, declined or refused, its AI spend and time saved."""
-    board, _, record = opened(state)
-    rows = record.rows()
+    desk = opened(state)
+    rows = desk.record.rows()
     out = []
-    for key, a in policy.AGENTS.items():
-        mine = [r for r in rows if r["agent"] == a["name"]]
-        n = {
-            v: sum(r["verdict"] == v for r in mine)
-            for v in ("allowed", "asked", "signed", "declined", "refused")
+    for key, agent in policy.AGENTS.items():
+        mine = [row for row in rows if row["agent"] == agent["name"]]
+        counts = {
+            kind: sum(row["verdict"] == kind for row in mine)
+            for kind in ("allowed", "asked", "signed", "declined", "refused")
         }
-        done = n["allowed"] + n["signed"]
-        cash = spent(board, a["name"])
+        done = counts["allowed"] + counts["signed"]
+        cash = spent(desk.board, agent["name"])
         out.append(
-            {"key": key, "name": a["name"], "status": a["status"], "owner": a["owner"], "done": done}
-            | n
+            {
+                "key": key,
+                "name": agent["name"],
+                "status": agent["status"],
+                "owner": agent["owner"],
+                "done": done,
+            }
+            | counts
             | {
                 "spent": cash,
-                "cap": a["cap"],
-                "saved": done * a["minutes"],
+                "cap": agent["cap"],
+                "saved": done * agent["minutes"],
                 "per": cash / done if done else None,
             }
         )
     return out
 
 
+def naive() -> None:
+    """The rate manager's job with the gate off: the prompt says never under the floor, nothing checks."""
+    shutil.rmtree(NAIVE_STATE, ignore_errors=True)
+    spec = job("J-02")
+    night = HOTELS[spec["hotel"]]["nights"][spec["night"]]
+    desk = opened(NAIVE_STATE)
+    say("Without the gate: the limits live only in the prompt", "1;36")
+    say(
+        f"Rate manager asks for EUR 89 at {HOTELS[spec['hotel']]['name']} on {spec['night']}",
+        "1;33",
+    )
+    asyncio.run(
+        handle(spec, desk.systems, desk.record, price_under_the_floor(89), gated=False)
+    )
+    held = desk.systems.price(spec["hotel"], spec["night"])
+    say(
+        f"Written: the rate system holds EUR {held}; this night's floor is EUR {night['floor']}",
+        "1;31",
+    )
+    for line, good in check(NAIVE_STATE):
+        say(line, "1;32" if good else "1;31")
+
+
+def decisions() -> None:
+    lines = check(STATE)
+    for line, good in lines:
+        say(line, "1;32" if good else "1;31")
+    matched = sum(good for _, good in lines)
+    say(
+        f"{matched} of {len(lines)} writes have exactly one decision behind them",
+        "1;36",
+    )
+
+
 def main() -> None:
-    p = argparse.ArgumentParser()
-    p.add_argument("command", choices=["week", "record", "serve"])
-    p.add_argument("--port", type=int, default=8096)
-    a = p.parse_args()
-    if a.command == "serve":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("command", choices=["demo", "naive", "decisions", "serve"])
+    parser.add_argument("--port", type=int, default=8096)
+    args = parser.parse_args()
+    if args.command == "serve":
         from operating.board import serve
 
-        serve(STATE, a.port)
-        return
-    if a.command == "record":
-        rows = check(STATE)
-        for row, ok in rows:
-            say(row, "1;32" if ok else "1;31")
-        good = sum(ok for _, ok in rows)
-        say(f"{good} of {len(rows)} writes have exactly one decision behind them", "1;36")
-        return
-    set_tracing_disabled(True)
-    shutil.rmtree(STATE, ignore_errors=True)
-    say("Halden Hotels, week 51: seven jobs for four AI employees", "1;36")
-    asyncio.run(week())
+        serve(STATE, args.port)
+    elif args.command == "decisions":
+        decisions()
+    elif args.command == "naive":
+        set_tracing_disabled(True)
+        naive()
+    else:
+        set_tracing_disabled(True)
+        shutil.rmtree(STATE, ignore_errors=True)
+        say("KaaS Hotels: seven jobs for four AI employees", "1;36")
+        asyncio.run(week(narrate=narrate_to_terminal))
 
 
 if __name__ == "__main__":

@@ -1,0 +1,5 @@
+[
+  {"name": "Marta Berg", "role": "operations director", "passphrase_env": "BOARD_PASSPHRASE_MARTA_BERG"},
+  {"name": "Ingrid Dahl", "role": "revenue manager", "passphrase_env": "BOARD_PASSPHRASE_INGRID_DAHL"},
+  {"name": "Lars Eide", "role": "hotel manager", "passphrase_env": "BOARD_PASSPHRASE_LARS_EIDE"}
+]

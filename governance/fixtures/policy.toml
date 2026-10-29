@@ -1,4 +1,4 @@
-# Halden Hotels' operating model for its AI employees. The operations director owns this file: which
+# KaaS Hotels' operating model for its AI employees. The operations director owns this file: which
 # employees run, who answers for each, what each may do alone, who signs above that, and what each may
 # spend on AI in a month. operating/policy.py reads it before any write reaches a system of record, so a
 # change here changes what the agents may do, with no prompt edited.

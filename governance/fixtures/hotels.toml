@@ -1,8 +1,8 @@
-# Halden Hotels' four hotels as the systems of record start the week: each night's price and floor,
+# KaaS Hotels' four hotels as the systems of record start the week: each night's price and floor,
 # what is booked, stock against par, the suppliers that sell each item, and the published rota.
 
 [hotels.OSL]
-name = "Halden Oslo"
+name = "KaaS Oslo"
 manager = "Nils Aas, hotel manager"
 [hotels.OSL.nights.2026-12-18]
 price = 149
@@ -15,7 +15,7 @@ on_hand = 80
 par = 200
 
 [hotels.BGO]
-name = "Halden Bergen"
+name = "KaaS Bergen"
 manager = "Kari Lunde, hotel manager"
 [hotels.BGO.nights.2026-12-19]
 price = 165
@@ -29,7 +29,7 @@ on_hand = 15
 par = 75
 
 [hotels.TRD]
-name = "Halden Trondheim"
+name = "KaaS Trondheim"
 manager = "Ola Vik, hotel manager"
 [hotels.TRD.stock.water]
 item = "Minibar water, bottles"
@@ -37,7 +37,7 @@ on_hand = 100
 par = 500
 
 [hotels.SVG]
-name = "Halden Stavanger"
+name = "KaaS Stavanger"
 manager = "Lars Eide, hotel manager"
 [[hotels.SVG.staff]]
 name = "Jonas Lie"

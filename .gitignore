@@ -16,6 +16,8 @@ __pycache__/
 .board/
 .evals/
 .upkeep/
-.halden/
+.hotels/
+.hotels-naive/
+.mission-naive/
 reports/
 .claude/.gate-ran
