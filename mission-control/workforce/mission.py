@@ -155,7 +155,12 @@ def read_issue(ctx: ToolContext[Shift], number: int) -> str:
 RUN_SECONDS = 90
 
 
-@function_tool
+def has_read_a_source(ctx: RunContextWrapper[Shift], agent: Agent[Shift]) -> bool:
+    # A small model sometimes drafts before it reads; the tool stays hidden until Linear or a doc was read.
+    return any(not source_id.startswith("GH#") for source_id in ctx.context.read)
+
+
+@function_tool(is_enabled=has_read_a_source)
 def request_reply(ctx: ToolContext[Shift], body: str) -> str:
     """Draft the reply to the customer on their GitHub issue. A human approves it before it is posted.
     End each sentence with the id of the issue or doc it rests on, like [EXP-41]."""
