@@ -7,6 +7,7 @@ A session marked `readable = true` also reads like English on screen: names of t
 unpacked triples, no walrus, no log line parsed back with removeprefix."""
 
 import ast
+import re
 import sys
 import tomllib
 from pathlib import Path
@@ -45,6 +46,18 @@ def hard_to_read(source_file: Path, folder: str) -> list[str]:
     return found
 
 
+def unknown_targets(folder: Path) -> list[str]:
+    """Every `make target` a session doc tells a reader to run must be a target of that Makefile."""
+    targets = set(re.findall(r"^([A-Za-z][\w-]*):", (folder / "Makefile").read_text(), re.M))
+    out = []
+    for doc in ("README.md", "AGENTS.md"):
+        if (folder / doc).is_file():
+            for name in sorted(set(re.findall(r"`make ([a-z][\w-]*)", (folder / doc).read_text()))):
+                if name not in targets:
+                    out.append(f"{folder.name}/{doc}: `make {name}` is not a target in its Makefile")
+    return out
+
+
 def problems() -> list[str]:
     sessions = tomllib.loads((ROOT / "sessions.toml").read_text())["session"]
     out, folders = [], {s["folder"] for s in sessions}
@@ -58,6 +71,7 @@ def problems() -> list[str]:
         if not (d / "Makefile").exists():
             out.append(f"{s['folder']}: built but has no Makefile")
             continue
+        out += unknown_targets(d)
         if s.get("readable"):
             for source_file in sorted(d.rglob("*.py")):
                 if ".venv" not in source_file.parts:

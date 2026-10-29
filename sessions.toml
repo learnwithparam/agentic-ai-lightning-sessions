@@ -18,7 +18,7 @@ readable = true
 job = "AI employees work KaaS's GitHub issues; a reply to a customer waits for a signed-in support approver"
 truth = "GitHub shows the reply, or the answer cites a source the analyst read"
 screen = "The board: Needs you, Approve and post, the receipt, cost per outcome, the team page"
-sells = "Buildcamp week 2, where learners build this board"
+sells = "The Agentic AI Buildcamp, where learners build this board as Project 2"
 
 [[session]]
 date = "2026-10-29"
@@ -30,7 +30,7 @@ readable = true
 job = "Priya's cancelled flight to a client meeting goes to a trip planner, a booker and a messenger, each scoped by an MCP gateway"
 truth = "The travel system holds a ticket that lands in time and both contacts were sent its flight; a fare over the cap waits for her manager"
 screen = "The card page with each hand-off, the gateway's call log with its refusals, then the ticket"
-sells = "Buildcamp week 3, where the board becomes a system of agents"
+sells = "The Agentic AI Buildcamp, where the board becomes a system of agents"
 
 [[session]]
 date = "2026-11-05"
