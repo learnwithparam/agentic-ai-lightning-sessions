@@ -75,6 +75,15 @@ def wrong_passphrase_refused() -> bool:
     return False
 
 
+def signed_out_decision_redirects(card: str) -> bool:
+    body = urllib.parse.urlencode({"yes": "1"}).encode()
+    try:
+        urllib.request.build_opener(NoRedirect).open(f"{BOARD}/cards/{card}/decide", body)
+    except urllib.error.HTTPError as redirect:
+        return redirect.code == 303 and redirect.headers["Location"].startswith("/login")
+    return False
+
+
 def posted_on(issues: Issues, number: int) -> list[dict]:
     return [comment for comment in issues.comments(number) if comment.get("approved_by")]
 
@@ -88,6 +97,12 @@ def main() -> None:
     check(
         "C-1 waits in Needs you with a cited reply",
         lane_holds(get(param, "/"), "Needs you", EXPORT) and "Rests on" in waiting,
+    )
+    check(
+        "a decision with no sign-in goes to the login page and changes nothing",
+        signed_out_decision_redirects(EXPORT)
+        and not posted_on(issues, 412)
+        and lane_holds(get(param, "/"), "Needs you", EXPORT),
     )
     decide(sam, EXPORT, True)
     check(

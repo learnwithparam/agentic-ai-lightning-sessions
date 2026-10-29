@@ -152,6 +152,9 @@ def read_issue(ctx: ToolContext[Shift], number: int) -> str:
     return f"{head}\n{issue['body']}\n\n{said}"
 
 
+RUN_SECONDS = 90
+
+
 @function_tool
 def request_reply(ctx: ToolContext[Shift], body: str) -> str:
     """Draft the reply to the customer on their GitHub issue. A human approves it before it is posted.
@@ -197,7 +200,8 @@ def resolver(model: Model | str | None) -> Agent[Shift]:
             "You answer customers on their GitHub issue. Read the issue first, then search Linear and "
             "the docs for the known cause, the planned fix and a workaround. Draft one short, friendly "
             "reply with request_reply: what is wrong, what they can do today, and what is planned. "
-            "Promise only what Linear or the docs say, and end each sentence with its source id."
+            "Promise only what Linear or the docs say, and end each sentence with its source id. "
+            "Reading and searching are not the job: finish by calling request_reply, never with a message."
         ),
         tools=[read_issue, search_linear, search_docs, request_reply],
         model=model,
@@ -266,8 +270,10 @@ async def work(
         trace_metadata={"card": card.card_id, "user": access.user if access else readers.user},
     )
     try:
-        result = await Runner.run(
-            manager(model), prompt, context=shift, max_turns=12, hooks=steps, run_config=traced
+        # A host that stalls mid-stream outlasts the client timeout; a run is cut off so the demo moves on.
+        result = await asyncio.wait_for(
+            Runner.run(manager(model), prompt, context=shift, max_turns=12, hooks=steps, run_config=traced),
+            timeout=RUN_SECONDS,
         )
         usage, succeeded = result.context_wrapper.usage, True
         said = str(result.final_output)
@@ -279,6 +285,9 @@ async def work(
         run = failure.run_data
         usage, succeeded = (run.context_wrapper.usage if run else Usage()), False
         said = f"run failed: {failure}"
+    except TimeoutError:
+        usage, succeeded = steps.usage, False
+        said = f"run failed: no answer in {RUN_SECONDS} seconds"
     except APIError as failure:
         # A host that is down or rate limited fails this run; the card goes back, the board keeps going.
         usage, succeeded = steps.usage, False
