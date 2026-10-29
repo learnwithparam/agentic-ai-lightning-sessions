@@ -2,7 +2,7 @@
 # A session is `built` when its folder exists, its `make check` passes and its steps.toml marks the
 # Lightning's slug as built; scripts/check_sessions.py enforces it. Slugs and titles are Maven's.
 #
-# Every session reuses Acme's board from mission-control, the project buildcamp learners build, but each
+# Every session reuses KaaS's board from mission-control, the project buildcamp learners build, but each
 # one puts a different everyday business job on it: never a support desk, refunds or GitHub work twice.
 # `job` is the work, `truth` is what decides it worked outside the model, `screen` is the UI the room
 # watches, `sells` is the next step.
@@ -14,7 +14,8 @@ slug = "build-an-ai-mission-control-app"
 title = "Build a Mission Control for AI Agents"
 folder = "mission-control"
 built = true
-job = "AI employees work Acme's GitHub issues; a reply to a customer waits for a human"
+readable = true
+job = "AI employees work KaaS's GitHub issues; a reply to a customer waits for a signed-in support approver"
 truth = "GitHub shows the reply, or the answer cites a source the analyst read"
 screen = "The board: Needs you, Approve and post, the receipt, cost per outcome, the team page"
 sells = "Buildcamp week 2, where learners build this board"

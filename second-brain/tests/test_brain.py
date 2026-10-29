@@ -121,7 +121,7 @@ def test_an_answer_is_done_only_on_citations_the_brain_accepted_and_an_unknown_w
     card = asyncio.run(work(board, board.cards[1], model=invented, brain=vault.root))
     assert card.column == "Needs you" and card.sources == []
     assert card.log[-1] == "Needs you: the brain refused 1 citations; Hannah Moreau answers"
-    assert [call["allowed"] for call in calls(board.path.parent, card.id) if call["tool"] == "cite"] == [
+    assert [call["allowed"] for call in calls(board.path.parent, card.card_id) if call["tool"] == "cite"] == [
         False
     ]
 

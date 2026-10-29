@@ -8,16 +8,22 @@ Needs you shows the draft, what it rests on, and Approve and Decline buttons whe
 
 from __future__ import annotations
 
+import contextlib
 import html
 import json
 import os
 import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import Any, NamedTuple
 
 from agents import Usage
 from aiohttp import web
 
+from workforce.access import Access
+from workforce.people import PERSON, People, people_or_exit, require_sign_in, signed_in_html
+
+PEOPLE_FILE = Path(__file__).resolve().parent.parent / "fixtures" / "people.json"
 COLUMNS = ("Backlog", "Needs you", "In flight", "Done")
 
 
@@ -60,7 +66,7 @@ class Run:
     input_tokens: int
     output_tokens: int
     cost: float
-    ok: bool
+    succeeded: bool
     note: str
     steps: list[str] = field(default_factory=list)
     read: list[str] = field(default_factory=list)
@@ -69,7 +75,7 @@ class Run:
 
 @dataclass
 class Card:
-    id: str
+    card_id: str
     title: str
     customer: str
     issue: str
@@ -83,13 +89,13 @@ class Card:
 
     @property
     def cost(self) -> float:
-        return sum(r.cost for r in self.runs)
+        return sum(run.cost for run in self.runs)
 
     @property
     def github(self) -> int | None:
         """The customer's GitHub issue number, from a link like GH#412."""
-        m = re.search(r"GH#(\d+)", self.issue)
-        return int(m.group(1)) if m else None
+        found = re.search(r"GH#(\d+)", self.issue)
+        return int(found.group(1)) if found else None
 
 
 @dataclass
@@ -100,17 +106,17 @@ class Board:
     @classmethod
     def open(cls, path: Path) -> Board:
         rows = read_json(path, [])
-        return cls(path, [Card(**{**r, "runs": [Run(**x) for x in r["runs"]]}) for r in rows])
+        return cls(path, [Card(**{**row, "runs": [Run(**run) for run in row["runs"]]}) for row in rows])
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         # A reader never sees half a file: the temp file is complete before it takes the name.
         pending = self.path.with_name(f"{self.path.name}.{os.getpid()}.tmp")
-        pending.write_text(json.dumps([asdict(c) for c in self.cards], indent=1))
+        pending.write_text(json.dumps([asdict(card) for card in self.cards], indent=1))
         os.replace(pending, self.path)
 
     def card(self, card_id: str) -> Card:
-        return next(c for c in self.cards if c.id == card_id)
+        return next(card for card in self.cards if card.card_id == card_id)
 
     def move(self, card: Card, column: str, note: str) -> None:
         assert column in COLUMNS, column
@@ -120,8 +126,8 @@ class Board:
 
     @property
     def cost_per_outcome(self) -> float | None:
-        done = sum(c.column == "Done" for c in self.cards)
-        return sum(c.cost for c in self.cards) / done if done else None
+        done = sum(card.column == "Done" for card in self.cards)
+        return sum(card.cost for card in self.cards) / done if done else None
 
 
 LANE = {"Backlog": "", "Needs you": "wait", "In flight": "flight", "Done": "done"}
@@ -133,12 +139,12 @@ MARK = (
     'rx="1" fill="#171717"/><rect x="16" y="3" width="3" height="6" rx="1" fill="#1f7a45"/></svg>'
 )
 CHECK = '<svg class="ck" viewBox="0 0 16 16"><path d="M3 8.5 6.5 12 13 4.5"/></svg>'
-E = html.escape
+escape = html.escape
 WORKSPACE = "KaaS"
 
 
-def usd(x: float) -> str:
-    return f"${x:.4f}" if x < 1 else f"${x:,.2f}"
+def usd(amount: float) -> str:
+    return f"${amount:.4f}" if amount < 1 else f"${amount:,.2f}"
 
 
 def plain(text: str) -> str:
@@ -147,67 +153,68 @@ def plain(text: str) -> str:
 
 
 def chips(ids: list[str], tone: str = "grey") -> str:
-    return "".join(f'<span class="chip {tone}">{E(s)}</span>' for s in ids)
+    return "".join(f'<span class="chip {tone}">{escape(label)}</span>' for label in ids)
 
 
-def answered(c: Card) -> str:
+def answered(card: Card) -> str:
     """What closed a question card: the answer, and only the sources the analyst read in that run."""
     return (
         f'<div class="receipt"><h4>{CHECK}Answered from sources it read</h4>'
-        f'<p>{E(plain(c.answer)[:400])}</p><div class="refs">{chips(c.sources)}</div></div>'
+        f'<p>{escape(plain(card.answer)[:400])}</p><div class="refs">{chips(card.sources)}</div></div>'
     )
 
 
-def receipt(c: Card, comment: dict) -> str:
+def receipt(card: Card, comment: dict) -> str:
     """The comment GitHub has on the customer's issue, read back from GitHub, and who approved it."""
     body = re.sub(r"\s*<!--.*?-->", "", comment["body"]).strip()
-    rows = [("Issue", f"GH#{c.github}"), ("Posted as", comment["author"])]
+    rows = [("Issue", f"GH#{card.github}"), ("Posted as", comment["author"])]
     rows += [("Approved by", comment["approved_by"])] if comment.get("approved_by") else []
-    cells = "".join(f"<dt>{E(k)}</dt><dd>{E(v)}</dd>" for k, v in rows)
+    cells = "".join(f"<dt>{escape(label)}</dt><dd>{escape(value)}</dd>" for label, value in rows)
     return (
-        f'<div class="receipt"><h4>{CHECK}GitHub shows the reply</h4><p>{E(body[:400])}</p>'
+        f'<div class="receipt"><h4>{CHECK}GitHub shows the reply</h4><p>{escape(body[:400])}</p>'
         f"<dl>{cells}</dl></div>"
     )
 
 
-def ask(c: Card, full: bool) -> str:
-    p = c.pending
-    text = p["body"] if full else p["body"][:160] + ("..." if len(p["body"]) > 160 else "")
+def ask(card: Card, full: bool) -> str:
+    pending = card.pending
+    body = pending["body"]
+    text = body if full else body[:160] + ("..." if len(body) > 160 else "")
     out = (
-        f'<div class="ask"><b>Post this reply on GH#{p["issue"]}?</b><span>{E(text)}</span>'
-        f'<div class="refs">Rests on {chips(p["rests_on"], "wait")}</div>'
-        f"<em>Drafted by {E(p['maker'])}. Approve here.</em>"
+        f'<div class="ask"><b>Post this reply on GH#{pending["issue"]}?</b><span>{escape(text)}</span>'
+        f'<div class="refs">Rests on {chips(pending["rests_on"], "wait")}</div>'
+        f"<em>Drafted by {escape(pending['maker'])}. Approve here, signed in.</em>"
     )
     out += (
-        f'<form method="post" action="/cards/{E(c.id)}/decide" class="decide">'
+        f'<form method="post" action="/cards/{escape(card.card_id)}/decide" class="decide">'
         '<button class="btn dark" name="yes" value="1">Approve and post</button>'
         '<button class="btn" name="yes" value="0">Decline</button></form>'
     )
     return out + "</div>"
 
 
-def card_html(c: Card, replied: dict | None) -> str:
-    gate = [line.removeprefix("Gate: ") for line in c.log if line.startswith("Gate: ")]
-    last = next((line.split(": ", 1)[-1] for line in reversed(c.log) if not line.startswith("Gate: ")), "")
+def card_html(card: Card, replied: dict | None) -> str:
+    gate = [line[len("Gate: ") :] for line in card.log if line.startswith("Gate: ")]
+    last = next((line.split(": ", 1)[-1] for line in reversed(card.log) if not line.startswith("Gate: ")), "")
     body = (
-        f'<article class="card tc"><h3><a href="/cards/{E(c.id)}">{E(c.title)}</a></h3>'
-        f'<div class="refs">{chips(c.issue.split(", "))}</div>'
-        f'<div class="who"><span><b>{E(c.employee or "Unassigned")}</b></span>'
-        f'<span class="cost">{len(c.runs)} {"run" if len(c.runs) == 1 else "runs"}, '
-        f"{usd(c.cost)}</span></div>"
+        f'<article class="card tc"><h3><a href="/cards/{escape(card.card_id)}">{escape(card.title)}</a></h3>'
+        f'<div class="refs">{chips(card.issue.split(", "))}</div>'
+        f'<div class="who"><span><b>{escape(card.employee or "Unassigned")}</b></span>'
+        f'<span class="cost">{len(card.runs)} {"run" if len(card.runs) == 1 else "runs"}, '
+        f"{usd(card.cost)}</span></div>"
     )
-    if c.pending:
-        body += ask(c, full=False)
+    if card.pending:
+        body += ask(card, full=False)
     elif last:
-        body += f'<p class="last">{E(last[:1].upper() + last[1:])}</p>'
+        body += f'<p class="last">{escape(last[:1].upper() + last[1:])}</p>'
     # On a Done card the refusal is history, so it reads quiet instead of as a live failure.
-    tone = "block past" if c.column == "Done" else "block"
-    body += "".join(f'<p class="{tone}">Gate refused: {E(g)}</p>' for g in gate[-1:])
+    tone = "block past" if card.column == "Done" else "block"
+    body += "".join(f'<p class="{tone}">Gate refused: {escape(note)}</p>' for note in gate[-1:])
     body += "</article>"
-    if c.column == "Done" and c.sources:
-        body += answered(c)
-    elif c.column == "Done" and replied:
-        body += receipt(c, replied)
+    if card.column == "Done" and card.sources:
+        body += answered(card)
+    elif card.column == "Done" and replied:
+        body += receipt(card, replied)
     return body
 
 
@@ -217,53 +224,65 @@ def page(title: str, live: str, here: str, *, workspace: str, signed_in: str = "
         for name, href in (("Board", "/"), ("Team", "/team"), ("Activity", "/#activity"))
     )
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"><title>{E(title)}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>{escape(title)}</title>
 <link rel="stylesheet" href="/static/base.css"><link rel="stylesheet" href="/static/board.css"></head><body>
 <nav class="top"><a class="brand" href="/">{MARK}Mission Control</a>{links}<span class="grow"></span>
-<span class="tenant">Workspace <b>{E(workspace)}</b></span>{signed_in}</nav>
+<span class="tenant">Workspace <b>{escape(workspace)}</b></span>{signed_in}</nav>
 <div id="live">{live}</div>
 <script>setInterval(async()=>{{try{{
 // Swapping an unchanged page, a page being typed in, or the buttons under the pointer eats the click.
 if(document.hidden||document.querySelector("form:focus-within,.decide:hover"))return;
-const t=await (await fetch(location.pathname)).text();
-const n=new DOMParser().parseFromString(t,"text/html").getElementById("live");
-const o=document.getElementById("live");
-if(n&&n.innerHTML!==o.innerHTML)o.replaceWith(n)}}catch(e){{}}}},2000)
+const text=await (await fetch(location.pathname)).text();
+const fresh=new DOMParser().parseFromString(text,"text/html").getElementById("live");
+const old=document.getElementById("live");
+if(fresh&&fresh.innerHTML!==old.innerHTML)old.replaceWith(fresh)}}catch(error){{}}}},2000)
 </script></body></html>"""
 
 
 Replies = dict[str, dict]
 
 
+class View(NamedTuple):
+    """What one page load reads: the board, GitHub's reply on each card, and the issues."""
+
+    board: Board
+    replies: Replies
+    issues: Any
+
+
 def render(board: Board, replies: Replies | None = None, *, workspace: str, signed_in: str = "") -> str:
     replies = replies or {}
     lanes = ""
     for name in COLUMNS:
-        cards = [c for c in board.cards if c.column == name]
-        inner = "".join(card_html(c, replies.get(c.id)) for c in cards) or '<p class="none">Nothing here</p>'
+        cards = [card for card in board.cards if card.column == name]
+        inner = (
+            "".join(card_html(card, replies.get(card.card_id)) for card in cards)
+            or '<p class="none">Nothing here</p>'
+        )
         lanes += (
             f'<section class="lane {LANE[name]}" aria-label="{name}"><h2><i></i>{name}'
             f"<small>{len(cards)}</small></h2>{inner}</section>"
         )
-    runs = [(c, r) for c in board.cards for r in c.runs]
-    failed = sum(not r.ok for _, r in runs)
+    runs = [(card, run) for card in board.cards for run in card.runs]
+    failed = sum(not run.succeeded for _, run in runs)
     log = (
         "".join(
-            f'<tr><td><a href="/cards/{E(c.id)}">{E(c.title)}</a></td><td>{E(r.employee)}</td>'
-            f'<td class="n hide">{r.input_tokens:,}</td><td class="n hide">{r.output_tokens:,}</td>'
-            f'<td class="n">{usd(r.cost)}</td><td>{"Finished" if r.ok else "Failed"}</td>'
-            f'<td class="said hide">{E(r.note[:140])}</td></tr>'
-            for c, r in reversed(runs)
+            f'<tr><td><a href="/cards/{escape(card.card_id)}">{escape(card.title)}</a></td>'
+            f"<td>{escape(run.employee)}</td>"
+            f'<td class="n hide">{run.input_tokens:,}</td><td class="n hide">{run.output_tokens:,}</td>'
+            f'<td class="n">{usd(run.cost)}</td><td>{"Finished" if run.succeeded else "Failed"}</td>'
+            f'<td class="said hide">{escape(run.note[:140])}</td></tr>'
+            for card, run in reversed(runs)
         )
         or '<tr><td colspan="7">No runs yet. Run make demo to work the backlog.</td></tr>'
     )
-    cpo, done = board.cost_per_outcome, sum(c.column == "Done" for c in board.cards)
+    per_outcome, done = board.cost_per_outcome, sum(card.column == "Done" for card in board.cards)
     live = f"""<div class="wrap tight" id="board"><div class="head"><div><h1 class="page">Board</h1>
 <p>Each card is done only when the system of record agrees. Anything that cannot be undone waits for you.</p>
 </div><div class="stats"><div class="stat lead"><span>Cost per outcome</span>
-<b>{"None yet" if cpo is None else usd(cpo)}</b><em>failed runs included</em></div>
+<b>{"None yet" if per_outcome is None else usd(per_outcome)}</b><em>failed runs included</em></div>
 <div class="stat"><span>Outcomes</span><b>{done}</b></div>
-<div class="stat"><span>Spent</span><b>{usd(sum(r.cost for _, r in runs))}</b>
+<div class="stat"><span>Spent</span><b>{usd(sum(run.cost for _, run in runs))}</b>
 <em>{len(runs)} runs, {failed} failed</em></div></div></div>
 <div class="lanes">{lanes}</div>
 <h2 class="sec" id="activity">Activity</h2><p class="sub">Every run on the board and what it cost.</p>
@@ -273,52 +292,56 @@ def render(board: Board, replies: Replies | None = None, *, workspace: str, sign
     return page("Mission Control", live, "Board", workspace=workspace, signed_in=signed_in)
 
 
-def detail(c: Card, replied: dict | None, *, workspace: str, signed_in: str = "") -> str:
+def detail(card: Card, replied: dict | None, *, workspace: str, signed_in: str = "") -> str:
     """One card: where it stands, every run with its steps and cost, and what closed it."""
     runs = (
         "".join(
-            f'<li class="card run"><div class="who"><b>{E(r.employee)}</b><span class="cost">'
-            f"{r.input_tokens:,} in, {r.output_tokens:,} out, {usd(r.cost)}, "
-            f"{'finished' if r.ok else 'failed'}</span></div>"
-            f'<ol class="steps">{"".join(f"<li>{E(s)}</li>" for s in r.steps)}</ol>'
-            f"{'<div class=refs>Read ' + chips(r.read) + '</div>' if r.read else ''}"
-            f'<p class="last">{E(plain(r.note)[:300])}</p></li>'
-            for r in c.runs
+            f'<li class="card run"><div class="who"><b>{escape(run.employee)}</b><span class="cost">'
+            f"{run.input_tokens:,} in, {run.output_tokens:,} out, {usd(run.cost)}, "
+            f"{'finished' if run.succeeded else 'failed'}</span></div>"
+            f'<ol class="steps">{"".join(f"<li>{escape(step)}</li>" for step in run.steps)}</ol>'
+            f"{'<div class=refs>Read ' + chips(run.read) + '</div>' if run.read else ''}"
+            f'<p class="last">{escape(plain(run.note)[:300])}</p></li>'
+            for run in card.runs
         )
         or '<li class="none">No runs yet.</li>'
     )
-    timeline = "".join(f"<li>{E(line)}</li>" for line in c.log) or '<li class="none">Not started.</li>'
+    timeline = (
+        "".join(f"<li>{escape(line)}</li>" for line in card.log) or '<li class="none">Not started.</li>'
+    )
     closed = ""
-    if c.pending:
-        closed = ask(c, full=True)
-    elif c.column == "Done" and c.sources:
-        closed = answered(c)
-    elif c.column == "Done" and replied:
-        closed = receipt(c, replied)
-    live = f"""<div class="wrap tight detail"><p class="eyebrow">{E(c.id)} &middot; {E(c.column)}</p>
-<h1 class="page">{E(c.title)}</h1><div class="refs">{chips(c.issue.split(", "))}
-{chips([c.customer], "blue") if c.customer else ""}</div>
-<div class="stats"><div class="stat"><span>Employee</span><b>{E(c.employee or "Unassigned")}</b></div>
-<div class="stat"><span>Runs</span><b>{len(c.runs)}</b></div>
-<div class="stat"><span>Cost</span><b>{usd(c.cost)}</b><em>failed runs included</em></div></div>
+    if card.pending:
+        closed = ask(card, full=True)
+    elif card.column == "Done" and card.sources:
+        closed = answered(card)
+    elif card.column == "Done" and replied:
+        closed = receipt(card, replied)
+    live = f"""<div class="wrap tight detail">
+<p class="eyebrow">{escape(card.card_id)} &middot; {escape(card.column)}</p>
+<h1 class="page">{escape(card.title)}</h1><div class="refs">{chips(card.issue.split(", "))}
+{chips([card.customer], "blue") if card.customer else ""}</div>
+<div class="stats"><div class="stat"><span>Employee</span><b>{escape(card.employee or "Unassigned")}</b></div>
+<div class="stat"><span>Runs</span><b>{len(card.runs)}</b></div>
+<div class="stat"><span>Cost</span><b>{usd(card.cost)}</b><em>failed runs included</em></div></div>
 {closed}<h2 class="sec">Runs</h2><ol class="runs">{runs}</ol>
 <h2 class="sec">Timeline</h2><ol class="timeline">{timeline}</ol></div>"""
-    return page(c.title, live, "", workspace=workspace, signed_in=signed_in)
+    return page(card.title, live, "", workspace=workspace, signed_in=signed_in)
 
 
 def team(board: Board, roster: tuple[Role, ...], *, workspace: str, signed_in: str = "") -> str:
     """Every AI employee: what it is hired for, what it must never do, and what its outcomes cost."""
     rows = ""
-    for r in roster:
+    for role in roster:
         # A crew card names every employee who worked it, and each is credited with its outcome.
-        mine = [c for c in board.cards if r.name in c.employee.split(", ")]
-        done = sum(c.column == "Done" for c in mine)
-        spent = sum(c.cost for c in mine)
+        mine = [card for card in board.cards if role.name in card.employee.split(", ")]
+        done = sum(card.column == "Done" for card in mine)
+        spent = sum(card.cost for card in mine)
         rows += (
-            f'<article class="card role"><h3>{E(r.name)}</h3><dl>'
-            f"<dt>Hired for</dt><dd>{E(r.outcome)}</dd><dt>Watched by</dt><dd>{E(r.metric)}</dd>"
-            f'<dt>Must never</dt><dd class="never">{E(r.never)}</dd></dl>'
-            f'<div class="refs">{chips(list(r.tools))}</div><div class="who">'
+            f'<article class="card role"><h3>{escape(role.name)}</h3><dl>'
+            f"<dt>Hired for</dt><dd>{escape(role.outcome)}</dd>"
+            f"<dt>Watched by</dt><dd>{escape(role.metric)}</dd>"
+            f'<dt>Must never</dt><dd class="never">{escape(role.never)}</dd></dl>'
+            f'<div class="refs">{chips(list(role.tools))}</div><div class="who">'
             f"<span><b>{done}</b> done of {len(mine)}</span>"
             f'<span class="cost">{usd(spent / done) + " per outcome" if done else "no outcome yet"}</span>'
             "</div></article>"
@@ -329,64 +352,78 @@ def team(board: Board, roster: tuple[Role, ...], *, workspace: str, signed_in: s
     return page("Team", live, "Team", workspace=workspace, signed_in=signed_in)
 
 
-def app(state: Path, roster: tuple[Role, ...]) -> web.Application:
+def refusal_html(card: Card) -> str:
+    """The latest refusal on a card still open, so the room sees why a click did not count."""
+    refused = [line for line in card.log if "refused:" in line]
+    if not refused or card.column == "Done":
+        return ""
+    return f'<p class="refusal">{escape(refused[-1].split("refused:", 1)[1].strip())}</p>'
+
+
+def app(
+    state: Path, roster: tuple[Role, ...], people: People, access: Access | None = None
+) -> web.Application:
     from workforce.issues import Issues
+    from workforce.mission import NotAllowed, sign
 
-    def read() -> tuple[Board, Replies]:
+    def read() -> View:
         board, issues = Board.open(state / "board.json"), Issues.open(state / "github.json")
-        replies = {c.id: found for c in board.cards if c.github and (found := issues.replied(c.github, c.id))}
-        return board, replies
+        replies = {}
+        for card in board.cards:
+            found = issues.replied(card.github, card.card_id) if card.github else None
+            if found:
+                replies[card.card_id] = found
+        return View(board, replies, issues)
 
-    async def index(_: web.Request) -> web.Response:
-        board, replies = read()
-        return web.Response(text=render(board, replies, workspace=WORKSPACE), content_type="text/html")
+    async def index(req: web.Request) -> web.Response:
+        view = read()
+        text = render(view.board, view.replies, workspace=WORKSPACE, signed_in=signed_in_html(req[PERSON]))
+        return web.Response(text=text, content_type="text/html")
 
     async def one(req: web.Request) -> web.Response:
-        board, replies = read()
+        view = read()
         try:
-            c = board.card(req.match_info["id"])
+            card = view.board.card(req.match_info["id"])
         except StopIteration:
             raise web.HTTPNotFound() from None
-        return web.Response(text=detail(c, replies.get(c.id), workspace=WORKSPACE), content_type="text/html")
+        text = detail(
+            card, view.replies.get(card.card_id), workspace=WORKSPACE, signed_in=signed_in_html(req[PERSON])
+        )
+        return web.Response(
+            text=text.replace('<h2 class="sec">Runs', refusal_html(card) + '<h2 class="sec">Runs', 1),
+            content_type="text/html",
+        )
 
-    async def roster_page(_: web.Request) -> web.Response:
-        return web.Response(text=team(read()[0], roster, workspace=WORKSPACE), content_type="text/html")
+    async def roster_page(req: web.Request) -> web.Response:
+        text = team(read()[0], roster, workspace=WORKSPACE, signed_in=signed_in_html(req[PERSON]))
+        return web.Response(text=text, content_type="text/html")
 
     async def decide(req: web.Request) -> web.Response:
-        # The page only records the click; mission.on_board hands it to decide, which holds the rule.
-        card_id = req.match_info["id"]
-        board = Board.open(state / "board.json")
-        if not any(c.id == card_id and c.pending for c in board.cards):
+        """The signed-in person answers; a refusal is written to the card, so the page shows it."""
+        view = read()
+        try:
+            card = view.board.card(req.match_info["id"])
+        except StopIteration:
+            raise web.HTTPNotFound() from None
+        if not card.pending:
             raise web.HTTPConflict(text="nothing is waiting on this card")
-        # Any page open in the same browser can post to 127.0.0.1, or rebind its own name to it; only the
-        # board's own form, served from loopback, counts.
-        local = req.host.rsplit(":", 1)[0] in ("127.0.0.1", "localhost")
-        if not local or req.headers.get("Origin") != f"{req.scheme}://{req.host}":
-            raise web.HTTPForbidden(text="approve from the board itself")
         form = await req.post()
-        f = state / "decisions" / f"{card_id}.json"
-        f.parent.mkdir(parents=True, exist_ok=True)
-        by = f"board:{os.environ.get('USER', 'human')}"
-        f.write_text(json.dumps({"by": by, "yes": form.get("yes") == "1"}))
-        raise web.HTTPSeeOther(f"/cards/{card_id}")
+        with contextlib.suppress(NotAllowed):
+            sign(view.board, card, view.issues, req[PERSON], form.get("yes") == "1", access)
+        raise web.HTTPSeeOther(f"/cards/{card.card_id}")
 
-    a = web.Application()
-    a.router.add_get("/", index)
-    a.router.add_get("/team", roster_page)
-    a.router.add_get("/cards/{id}", one)
-    a.router.add_post("/cards/{id}/decide", decide)
-    a.router.add_static("/static", WEB)
-    a.router.add_static("/fonts", WEB / "fonts")
-    return a
-
-
-async def start(state: Path, roster: tuple[Role, ...], port: int = 8080) -> web.AppRunner:
-    """Serve the board inside the running demo, so it moves while the employees work."""
-    runner = web.AppRunner(app(state, roster))
-    await runner.setup()
-    await web.TCPSite(runner, "127.0.0.1", port).start()
-    return runner
+    web_app = web.Application()
+    require_sign_in(web_app, people, WORKSPACE)
+    web_app.router.add_get("/", index)
+    web_app.router.add_get("/team", roster_page)
+    web_app.router.add_get("/cards/{id}", one)
+    web_app.router.add_post("/cards/{id}/decide", decide)
+    web_app.router.add_static("/static", WEB)
+    web_app.router.add_static("/fonts", WEB / "fonts")
+    return web_app
 
 
 def serve(state: Path, roster: tuple[Role, ...], port: int = 8080) -> None:
-    web.run_app(app(state, roster), host="127.0.0.1", port=port)
+    web.run_app(
+        app(state, roster, people_or_exit(PEOPLE_FILE), Access.from_env()), host="127.0.0.1", port=port
+    )

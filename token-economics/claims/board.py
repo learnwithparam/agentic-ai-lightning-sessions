@@ -198,7 +198,7 @@ class BoardPages:
         claims = Claims.open(self.desk.folder(number))
         extra = filed_html(claims, card.issue)
         if self.desk.is_live(number):
-            extra += decide_html(claims, card.issue, card.id, number)
+            extra += decide_html(claims, card.issue, card.card_id, number)
         extra += decisions_html(claims, card.issue) + ledger_html(claims, card.issue)
         page = detail(card, None, workspace=WORKSPACE, signed_in=signed_in_html(person)).replace(
             '<h2 class="sec">Runs</h2>', extra + '<h2 class="sec">Runs</h2>', 1

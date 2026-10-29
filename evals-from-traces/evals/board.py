@@ -24,10 +24,10 @@ from workforce.board import (
     WEB,
     Board,
     Card,
-    E,
     Role,
     Run,
     detail,
+    escape,
     is_blank,
     render,
     team,
@@ -98,7 +98,7 @@ def case_cards(report: dict) -> list[Card]:
             if case_id in rows.get(name, {})
         ]
         runs = [run_of(name, row) for name, row in pair]
-        done = len(runs) == 2 and all(run.ok for run in runs)
+        done = len(runs) == 2 and all(run.succeeded for run in runs)
         card = Card(
             case_id,
             inquiry["question"],
@@ -172,11 +172,11 @@ def swap_html(report: dict) -> str:
         '<div class="verdict ok"><b>Swap approved</b><span>No missed side effect, and no fewer passes.</span>'
         if swap["approved"]
         else '<div class="verdict no"><b>Swap refused</b>'
-        + "".join(f"<span>{E(reason)}</span>" for reason in swap["reasons"])
+        + "".join(f"<span>{escape(reason)}</span>" for reason in swap["reasons"])
     )
     return (
         '<h2 class="sec" id="evals">Evals before the swap</h2><p class="sub">'
-        f"{len(runs['production'])} production runs from {E(report['source'])}, "
+        f"{len(runs['production'])} production runs from {escape(report['source'])}, "
         "each labelled by Dr. Amara Okafor, rerun on the candidate. The judge agrees with her grades on "
         f"{calibration['agreed']} of {calibration['total']}, so it is {judge}.</p>"
         '<table class="tbl swap"><thead><tr><th>Run</th><th class=n>Cases passed</th>'
@@ -191,14 +191,14 @@ def label_html(card_id: str) -> str:
     want = SAID[label["route"]] + (
         f", citing §{label['section']}" if label.get("section") else ""
     )
-    return f'<div class="receipt label"><h4>Labelled by Dr. Amara Okafor</h4><p>Should be {E(want)}.</p></div>'
+    return f'<div class="receipt label"><h4>Labelled by Dr. Amara Okafor</h4><p>Should be {escape(want)}.</p></div>'
 
 
 def decisions_html(state: Path) -> str:
     rows = (
         "".join(
-            f'<tr class="{"no" if row["decision"] == "refused" else ""}"><td><b>{E(row["by"])}</b></td>'
-            f"<td>{E(row['decision'])}</td><td>{E(row['said'])}</td></tr>"
+            f'<tr class="{"no" if row["decision"] == "refused" else ""}"><td><b>{escape(row["by"])}</b></td>'
+            f"<td>{escape(row['decision'])}</td><td>{escape(row['said'])}</td></tr>"
             for row in read_decisions(state)
         )
         or '<tr><td colspan="3">No decisions yet.</td></tr>'
@@ -214,7 +214,7 @@ def decisions_html(state: Path) -> str:
 def sign_form_html() -> str:
     return (
         f'<form method="post" action="/cards/{SWAP_ID}/sign" class="decide">'
-        f"<p>The gate passed this candidate. Only {E(SIGNER)} can switch production to it.</p>"
+        f"<p>The gate passed this candidate. Only {escape(SIGNER)} can switch production to it.</p>"
         '<button name="decision" value="sign">Sign the swap</button></form>'
     )
 
@@ -243,7 +243,7 @@ def board_page(state: Path, person: Person | None = None) -> str:
 
 def card_page(state: Path, card_id: str, person: Person | None = None) -> str:
     report = report_of(state)
-    card = next(found for found in cards(report, state) if found.id == card_id)
+    card = next(found for found in cards(report, state) if found.card_id == card_id)
     page = detail(card, None, workspace=WORKSPACE, signed_in=signed_in(person))
     if card_id == SWAP_ID:
         waiting = card.column == "Needs you" and person is not None

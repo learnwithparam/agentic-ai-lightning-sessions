@@ -4,7 +4,7 @@ SHELL := /bin/bash
 # so does its .env, so the model, Langfuse and the sign-in passphrases live in one place. The crew names
 # its model in upkeep/crew.py; the recipes are silent, so a recording shows the shift, never a model name.
 # Langfuse's local keys from mission-control's compose.yaml, the same as its STACK_ENV; not real secrets.
-LANGFUSE := LANGFUSE_HOST=http://127.0.0.1:8270 LANGFUSE_PUBLIC_KEY=pk-lf-acme-local LANGFUSE_SECRET_KEY=sk-lf-acme-local
+LANGFUSE := LANGFUSE_HOST=http://127.0.0.1:8270 LANGFUSE_PUBLIC_KEY=pk-lf-kaas-local LANGFUSE_SECRET_KEY=sk-lf-kaas-local
 RUN := $(LANGFUSE) PYTHONPATH=../mission-control uv run --quiet
 KEYS := --env-file ../mission-control/.env
 BUDGET_USD ?= 0.01

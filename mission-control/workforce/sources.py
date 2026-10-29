@@ -25,7 +25,7 @@ FIXTURES = ROOT / "fixtures"
 
 @dataclass(frozen=True)
 class Source:
-    id: str
+    source_id: str
     kind: str
     title: str
     text: str
@@ -34,28 +34,28 @@ class Source:
 
 
 def terms(query: str) -> set[str]:
-    return {w for w in re.findall(r"[a-z0-9]+", query.lower()) if len(w) > 2}
+    return {word for word in re.findall(r"[a-z0-9]+", query.lower()) if len(word) > 2}
 
 
 def rank(rows: list[Source], query: str, groups: frozenset[str], limit: int = 3) -> list[Source]:
     """Rows the groups may read, most query terms matched first. A row matching none is never returned."""
     want = terms(query)
-    scored = [(len(want & terms(f"{r.title} {r.text}")), r) for r in rows if r.access & groups]
-    return [r for n, r in sorted(scored, key=lambda x: -x[0]) if n > 0][:limit]
+    scored = [(len(want & terms(f"{row.title} {row.text}")), row) for row in rows if row.access & groups]
+    return [row for hits, row in sorted(scored, key=lambda pair: -pair[0]) if hits > 0][:limit]
 
 
 def fixture_github(tenant: str) -> list[Source]:
     rows = json.loads((FIXTURES / tenant / "github.json").read_text())
     return [
         Source(
-            f"GH#{r['number']}",
+            f"GH#{row['number']}",
             "github",
-            r["title"],
-            f"{r['state']}. {r['body']}",
-            r["url"],
-            frozenset(r["access"]),
+            row["title"],
+            f"{row['state']}. {row['body']}",
+            row["url"],
+            frozenset(row["access"]),
         )
-        for r in rows
+        for row in rows
     ]
 
 
@@ -63,14 +63,14 @@ def fixture_linear(tenant: str) -> list[Source]:
     rows = json.loads((FIXTURES / tenant / "linear.json").read_text())
     return [
         Source(
-            r["identifier"],
+            row["identifier"],
             "linear",
-            r["title"],
-            f"{r['state']}, {r['assignee']}. {r['description']}",
-            r["url"],
-            frozenset(r["access"]),
+            row["title"],
+            f"{row['state']}, {row['assignee']}. {row['description']}",
+            row["url"],
+            frozenset(row["access"]),
         )
-        for r in rows
+        for row in rows
     ]
 
 
@@ -78,12 +78,17 @@ def docs(folder: Path) -> list[Source]:
     acl = folder / "access.json"
     access = json.loads(acl.read_text()) if acl.exists() else {}
     out = []
-    for f in sorted(folder.glob("*.md")):
-        body = f.read_text()
-        title = body.splitlines()[0].lstrip("# ").strip() if body else f.stem
+    for doc in sorted(folder.glob("*.md")):
+        body = doc.read_text()
+        title = body.splitlines()[0].lstrip("# ").strip() if body else doc.stem
         out.append(
             Source(
-                f"doc:{f.stem}", "docs", title, body, f.resolve().as_uri(), frozenset(access.get(f.stem, []))
+                f"doc:{doc.stem}",
+                "docs",
+                title,
+                body,
+                doc.resolve().as_uri(),
+                frozenset(access.get(doc.stem, [])),
             )
         )
     return out
@@ -92,9 +97,9 @@ def docs(folder: Path) -> list[Source]:
 def live_github(repo: str, query: str, access: frozenset[str], token: str | None = None) -> list[Source]:
     """GitHub's issue search for one repository, every row readable by `access`. Public repositories work
     without a token."""
-    q = urllib.parse.quote(f"repo:{repo} {query}")
+    search = urllib.parse.quote(f"repo:{repo} {query}")
     req = urllib.request.Request(  # noqa: S310 - fixed https host
-        f"https://api.github.com/search/issues?q={q}&per_page=3",
+        f"https://api.github.com/search/issues?q={search}&per_page=3",
         headers={
             "Accept": "application/vnd.github+json",
             **({"Authorization": f"Bearer {token}"} if token else {}),
@@ -104,14 +109,14 @@ def live_github(repo: str, query: str, access: frozenset[str], token: str | None
         items = json.load(res)["items"]
     return [
         Source(
-            f"GH#{i['number']}",
+            f"GH#{item['number']}",
             "github",
-            i["title"],
-            f"{i['state']}. {i.get('body') or ''}"[:1500],
-            i["html_url"],
+            item["title"],
+            f"{item['state']}. {item.get('body') or ''}"[:1500],
+            item["html_url"],
             access,
         )
-        for i in items
+        for item in items
     ]
 
 
@@ -124,7 +129,7 @@ class Readers:
     """One tenant's sources, searched as one user. from_env switches GitHub and docs to live ones when
     they are configured."""
 
-    tenant: str = "acme"
+    tenant: str = "kaas"
     user: str = ""
     github_repo: str | None = None
     github_token: str | None = None
@@ -132,15 +137,15 @@ class Readers:
     docs_dir: Path | None = None
 
     @classmethod
-    def from_env(cls, tenant: str = "acme", user: str = "") -> Readers:
-        d = os.environ.get("DOCS_DIR")
+    def from_env(cls, tenant: str = "kaas", user: str = "") -> Readers:
+        docs_dir = os.environ.get("DOCS_DIR")
         return cls(
             tenant,
             user,
             os.environ.get("GITHUB_REPO") or None,
             os.environ.get("GITHUB_TOKEN") or None,
             frozenset((os.environ.get("GITHUB_ACCESS") or "engineering").split(",")),
-            Path(d) if d else None,
+            Path(docs_dir) if docs_dir else None,
         )
 
     def as_user(self, user: str) -> Readers:

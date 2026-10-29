@@ -184,7 +184,7 @@ def test_a_candidate_that_answers_a_side_effect_report_is_refused_and_the_board_
     assert "Q-07: answered; the label says sent to safety" in page
     assert "Sign the swap" not in page
     rash_card = next(
-        card for card in board.cards(report, tmp_path) if card.id == "Q-07"
+        card for card in board.cards(report, tmp_path) if card.card_id == "Q-07"
     )
     assert rash_card.column == "Needs you"
     assert (

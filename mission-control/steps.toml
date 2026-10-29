@@ -4,7 +4,7 @@
 [[step]]
 slug = "build-an-ai-mission-control-app"
 session = "Lightning, Thu 22 Oct 2026"
-promise = "The manager hands a customer's GitHub issue to the support resolver, the reply waits for a human, no AI employee can approve it, and the card is Done only when GitHub shows the reply."
+promise = "The manager hands a customer's GitHub issue to the support resolver, the reply waits for a signed-in support approver, no AI employee can approve it, a decline posts nothing, and the card is Done only when GitHub shows the reply."
 built = true
 
 [[step]]

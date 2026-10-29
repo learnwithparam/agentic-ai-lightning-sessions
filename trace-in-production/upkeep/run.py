@@ -91,7 +91,7 @@ async def recover(board: Board, get: Get | None, since: str | None, wait: float 
         if card.column != "In flight":
             continue
         number = attempts(card)
-        found = await trace_of(get, card.id, number, wait, since) if get else None
+        found = await trace_of(get, card.card_id, number, wait, since) if get else None
         if found and found.usage:
             for who, (tokens_in, tokens_out) in found.usage.items():
                 note = f"{KILLED}; spend read from its trace"
@@ -100,13 +100,14 @@ async def recover(board: Board, get: Get | None, since: str | None, wait: float 
                 )
             spent = sum(cost(*tokens) for tokens in found.usage.values())
             say(
-                f"  {card.id}  run {number} was killed; its trace in Langfuse says it spent {usd(spent)}",
+                f"  {card.card_id}  run {number} was killed; "
+                f"its trace in Langfuse says it spent {usd(spent)}",
                 "1;33",
             )
         else:
             note = f"{KILLED}; no trace, so its spend is unknown"
             card.runs.append(Run(TRIAGE, 0, 0, 0.0, False, note, killed=True))
-            say(f"  {card.id}  run {number} was killed, and no trace says what it spent", "1;31")
+            say(f"  {card.card_id}  run {number} was killed, and no trace says what it spent", "1;31")
         board.move(card, "Backlog", f"run {number} was killed mid-run")
 
 
@@ -120,7 +121,7 @@ async def work(
     number = attempts(card) + 1
     # The checkpoint: from here until the card moves on, a killed worker leaves it In flight.
     board.move(card, "In flight", f"run {number} started")
-    alert = next(row for row in ALERTS if row["id"] == card.id)
+    alert = next(row for row in ALERTS if row["id"] == card.card_id)
     result = await handle(alert, cmms, crew, number, kill)
     note = result.did or result.error or "The crew did not act on it"
     for who, (tokens_in, tokens_out) in result.usage.items():
@@ -130,7 +131,7 @@ async def work(
         )
     card.employee = ", ".join(dict.fromkeys(run.employee for run in card.runs if not run.killed))
     # Done only when the maintenance system holds the outcome, whatever the crew said it did.
-    held = cmms.outcome(card.id)
+    held = cmms.outcome(card.card_id)
     if held:
         card.issue = f"{alert['machine']}, {held.order_id}" if held.order_id else alert["machine"]
         board.move(card, "Done", result.did)
@@ -138,12 +139,15 @@ async def work(
         board.move(card, "Needs you", result.error or "the crew did not act on it")
     spent = sum(cost(*tokens) for tokens in result.usage.values())
     name = MACHINES[alert["machine"]]["name"]
-    say(f"  {card.id}  {name:<22} {result.did or 'no action':<22} {usd(spent)}", "1;32" if held else "1;31")
+    say(
+        f"  {card.card_id}  {name:<22} {result.did or 'no action':<22} {usd(spent)}",
+        "1;32" if held else "1;31",
+    )
 
 
 def pause(board: Board, state: Path) -> None:
     """Over budget: the shift stops and a card asks the maintenance lead, on the board, signed in."""
-    remaining = [card.id for card in board.cards if card.id in ALERT_IDS and card.column != "Done"]
+    remaining = [card.card_id for card in board.cards if card.card_id in ALERT_IDS and card.column != "Done"]
     summary = {
         "shift": began(state),
         "spent": budget.spent(board),
@@ -179,14 +183,14 @@ async def shift(
     crew = crew or model()
     worked = 0
     for card in board.cards:
-        if card.id not in ALERT_IDS or card.column == "Done":
+        if card.card_id not in ALERT_IDS or card.column == "Done":
             continue
         if limit and worked and budget.over(board):
             pause(board, state)
             return board
-        await work(board, cmms, card, crew, kill if card.id == kill_at else None)
+        await work(board, cmms, card, crew, kill if card.card_id == kill_at else None)
         worked += 1
-    alerts = [card for card in board.cards if card.id in ALERT_IDS]
+    alerts = [card for card in board.cards if card.card_id in ALERT_IDS]
     done = sum(card.column == "Done" for card in alerts)
     say(f"{done} of {len(alerts)} alerts handled, {len(cmms.orders)} repair orders", "1;36")
     return board
@@ -240,9 +244,9 @@ def reconcile(state: Path, get: Get) -> list[Reconciled]:
     """Each card's runs against its traces: one trace per run, and the same tokens per employee."""
     board, rows = Board.open(state / "board.json"), []
     for card in board.cards:
-        if card.id not in ALERT_IDS:
+        if card.card_id not in ALERT_IDS:
             continue
-        found = traces(get, card.id, began(state))
+        found = traces(get, card.card_id, began(state))
         mine: dict[str, list[int]] = {}
         for run in card.runs:
             add_tokens(mine, run.employee, run.input_tokens, run.output_tokens)
@@ -253,7 +257,7 @@ def reconcile(state: Path, get: Get) -> list[Reconciled]:
         runs = attempts(card)
         same = {who: tally for who, tally in mine.items() if any(tally)} == theirs
         tokens = sum(tokens_in + tokens_out for tokens_in, tokens_out in theirs.values())
-        rows.append(Reconciled(card.id, runs, len(found), tokens, len(found) == runs and same))
+        rows.append(Reconciled(card.card_id, runs, len(found), tokens, len(found) == runs and same))
     return rows
 
 

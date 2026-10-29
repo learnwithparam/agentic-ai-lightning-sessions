@@ -89,7 +89,7 @@ def verdicts(state, card: str) -> list[str]:
 @pytest.mark.lab("build-an-ai-agent-governance-framework")
 def test_each_job_lands_the_verdict_the_policy_names(tmp_path):
     done = week(tmp_path)
-    columns = {card.id: card.column for card in done.cards}
+    columns = {card.card_id: card.column for card in done.cards}
     assert columns == {
         "J-01": "Done",
         "J-02": "Needs you",

@@ -16,7 +16,7 @@ THREAD = [
     {
         "ts": "1.0",
         "user": "U_PM",
-        "text": "Globex says their weekly CSV export fails with a 504 since Monday.",
+        "text": "A customer says their weekly CSV export fails with a 504 since Monday.",
     },
     {"ts": "2.0", "user": "U_ENG", "text": "Their workspace has 61,000 tasks."},
     {"ts": "3.0", "user": "U_ENG", "text": "<@U_BOT> is this a known bug, and who is on it?"},
@@ -27,11 +27,11 @@ class FakeSlack:
     def __init__(self, messages):
         self.messages, self.posted = messages, []
 
-    async def conversations_replies(self, channel, ts):
+    async def conversations_replies(self, channel, **thread):
         return {"messages": self.messages}
 
-    async def chat_postMessage(self, **kw):
-        self.posted.append(kw)
+    async def chat_postMessage(self, **kwargs):
+        self.posted.append(kwargs)
 
 
 def searches_then(text):
@@ -57,7 +57,7 @@ def test_tagged_in_a_thread_it_answers_from_github_linear_and_docs_with_sources(
     event = {"channel": "C1", "ts": "3.0", "thread_ts": "1.0", "user": "U_ENG", "text": THREAD[2]["text"]}
 
     text = asyncio.run(
-        on_mention(event, slack, Readers("acme", "U_ENG"), memory=tmp_path / "m.sqlite", model=model)
+        on_mention(event, slack, Readers("kaas", "U_ENG"), memory=tmp_path / "m.sqlite", model=model)
     )
 
     # It read the thread it was tagged in, not just the mention.
@@ -66,8 +66,8 @@ def test_tagged_in_a_thread_it_answers_from_github_linear_and_docs_with_sources(
     # It replied in that thread, linking each source it read and cited.
     assert slack.posted == [{"channel": "C1", "thread_ts": "1.0", "text": text}]
     for sid, url in [
-        ("GH#412", "https://github.com/acme/app/issues/412"),
-        ("EXP-41", "https://linear.app/acme/issue/EXP-41"),
+        ("GH#412", "https://github.com/kaas/app/issues/412"),
+        ("EXP-41", "https://linear.app/kaas/issue/EXP-41"),
         ("doc:exports", "exports.md"),
     ]:
         assert sid in text and url in text
@@ -79,12 +79,12 @@ def test_a_follow_up_in_the_same_thread_remembers_the_first_answer():
     session = SQLiteSession("C1:1.0")
     first = searches_then("It is [GH#412], fixed in [EXP-41].")
     asyncio.run(
-        answer("Is the export timeout known?", readers=Readers("acme", "U_ENG"), session=session, model=first)
+        answer("Is the export timeout known?", readers=Readers("kaas", "U_ENG"), session=session, model=first)
     )
 
     second = ScriptedModel([[assistant_message("The Data squad owns [EXP-41].")]])
     reply = asyncio.run(
-        answer("Who owns the fix?", readers=Readers("acme", "U_ENG"), session=session, model=second)
+        answer("Who owns the fix?", readers=Readers("kaas", "U_ENG"), session=session, model=second)
     )
 
     assert "It is [GH#412], fixed in [EXP-41]." in str(second.calls[0].input)
@@ -94,9 +94,9 @@ def test_a_follow_up_in_the_same_thread_remembers_the_first_answer():
 
 def test_citations_are_kept_only_for_sources_read_in_this_run():
     read = {"EXP-41": Source("EXP-41", "linear", "t", "x", "u")}
-    r = check_citations("Fixed in [EXP-41] and [MADE-UP].", read)
-    assert [s.id for s in r.sources] == ["EXP-41"] and r.dropped == ["MADE-UP"]
-    assert r.text == "Fixed in [EXP-41] and."
+    checked = check_citations("Fixed in [EXP-41] and [MADE-UP].", read)
+    assert [source.source_id for source in checked.sources] == ["EXP-41"] and checked.dropped == ["MADE-UP"]
+    assert checked.text == "Fixed in [EXP-41] and."
 
 
 def test_a_read_source_counts_with_a_typographic_hyphen_or_without_brackets():
@@ -104,11 +104,16 @@ def test_a_read_source_counts_with_a_typographic_hyphen_or_without_brackets():
         "doc:release-process": Source("doc:release-process", "docs", "t", "x", "u"),
         "GH#412": Source("GH#412", "github", "t", "x", "u"),
     }
-    r = check_citations("See [doc:release\u2011process], tracked as (GH#412), not [GH\u2011999].", read)
-    assert [s.id for s in r.sources] == ["doc:release-process", "GH#412"] and r.dropped == ["GH-999"]
+    checked = check_citations("See [doc:release\u2011process], tracked as (GH#412), not [GH\u2011999].", read)
+    assert [source.source_id for source in checked.sources] == [
+        "doc:release-process",
+        "GH#412",
+    ] and checked.dropped == ["GH-999"]
     assert check_citations("Nothing found for GH#4120.", read).sources == []
 
 
 def test_search_never_returns_a_row_that_matches_no_term():
-    assert rank(fixture_github("acme"), "kubernetes helm chart", ENG) == []
-    assert [s.id for s in rank(fixture_github("acme"), "csv export timeout", ENG)][0] == "GH#412"
+    assert rank(fixture_github("kaas"), "kubernetes helm chart", ENG) == []
+    assert [source.source_id for source in rank(fixture_github("kaas"), "csv export timeout", ENG)][
+        0
+    ] == "GH#412"

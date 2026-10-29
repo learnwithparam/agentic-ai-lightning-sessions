@@ -16,7 +16,18 @@ from aiohttp import web
 from operating import policy, run
 from operating.hotels import describe
 from operating.record import Record
-from workforce.board import WEB, Board, E, Role, chips, detail, page, render, team, usd
+from workforce.board import (
+    WEB,
+    Board,
+    Role,
+    chips,
+    detail,
+    escape,
+    page,
+    render,
+    team,
+    usd,
+)
 from workforce.people import (
     PERSON,
     Person,
@@ -63,11 +74,11 @@ TEAM = (
 
 def ask_html(card_id: str, waiting: dict) -> str:
     return (
-        f'<div class="ask"><b>{E(waiting["agent"])} asks: {E(describe(waiting["action"]))}</b>'
-        f"<span>{E(waiting['rule'])}.</span>"
+        f'<div class="ask"><b>{escape(waiting["agent"])} asks: {escape(describe(waiting["action"]))}</b>'
+        f"<span>{escape(waiting['rule'])}.</span>"
         f'<div class="refs">Signs {chips([policy.first(waiting["signer"])], "wait")}</div>'
-        f"<em>Nothing is written until {E(policy.first(waiting['signer']))} answers.</em>"
-        f'<form method="post" action="/cards/{E(card_id)}/decide" class="decide">'
+        f"<em>Nothing is written until {escape(policy.first(waiting['signer']))} answers.</em>"
+        f'<form method="post" action="/cards/{escape(card_id)}/decide" class="decide">'
         '<button class="btn dark" name="yes" value="1">Approve</button>'
         '<button class="btn" name="yes" value="0">Decline</button></form></div>'
     )
@@ -75,7 +86,7 @@ def ask_html(card_id: str, waiting: dict) -> str:
 
 def into_card(html: str, card_id: str, extra: str) -> str:
     """Put the ask in place of the card's last line on the board."""
-    anchor = html.find(f'<a href="/cards/{E(card_id)}">')
+    anchor = html.find(f'<a href="/cards/{escape(card_id)}">')
     start = html.find('<p class="last">', anchor)
     end = html.find("</p>", start) + len("</p>")
     return html[:start] + extra + html[end:] if anchor >= 0 and start >= 0 else html
@@ -83,7 +94,7 @@ def into_card(html: str, card_id: str, extra: str) -> str:
 
 def for_(row: dict) -> str:
     return (
-        ", for " + E(policy.first(row["signer"]))
+        ", for " + escape(policy.first(row["signer"]))
         if row["signer"] and row["by"] != "policy"
         else ""
     )
@@ -91,9 +102,9 @@ def for_(row: dict) -> str:
 
 def record_html(rows: list[dict]) -> str:
     body = "".join(
-        f'<tr><td>{E(row["at"][11:16])}</td><td><span class="verdict-chip {E(row["verdict"].replace(" ", "-"))}">'
-        f"{E(row['verdict'])}</span></td><td>{E(row['action'])}</td><td>{E(row['rule'])}</td>"
-        f"<td>{E(row['by'])}{for_(row)}"
+        f'<tr><td>{escape(row["at"][11:16])}</td><td><span class="verdict-chip {escape(row["verdict"].replace(" ", "-"))}">'
+        f"{escape(row['verdict'])}</span></td><td>{escape(row['action'])}</td><td>{escape(row['rule'])}</td>"
+        f"<td>{escape(row['by'])}{for_(row)}"
         "</td></tr>"
         for row in rows
     )
@@ -133,7 +144,7 @@ def refusal_html(card) -> str:
     """The latest refusal on the card, so the room sees why a signature did not count."""
     refused = [line for line in card.log if "refused:" in line]
     return (
-        f'<p class="refusal">{E(refused[-1].split("refused:", 1)[1].strip())}</p>'
+        f'<p class="refusal">{escape(refused[-1].split("refused:", 1)[1].strip())}</p>'
         if refused
         else ""
     )
@@ -165,16 +176,16 @@ def signs(employee: dict) -> str:
 
 def model_html() -> str:
     rows = "".join(
-        f"<tr><td><b>{E(employee['name'])}</b></td>"
-        f'<td><span class="status {E(employee["status"])}">{E(employee["status"])}</span></td>'
-        f"<td>{E(employee['owner'])}</td><td>{E(policy.alone(key))}</td>"
-        f"<td>{E(signs(employee))}</td>"
+        f"<tr><td><b>{escape(employee['name'])}</b></td>"
+        f'<td><span class="status {escape(employee["status"])}">{escape(employee["status"])}</span></td>'
+        f"<td>{escape(employee['owner'])}</td><td>{escape(policy.alone(key))}</td>"
+        f"<td>{escape(signs(employee))}</td>"
         f'<td class="n">{usd(employee["cap"])}</td></tr>'
         for key, employee in policy.AGENTS.items()
     )
     return (
         '<h2 class="sec" id="model">Operating model</h2><p class="sub">From the policy file '
-        f"{E(policy.first(policy.POLICY['director']))} owns. The gate reads it before every write.</p>"
+        f"{escape(policy.first(policy.POLICY['director']))} owns. The gate reads it before every write.</p>"
         '<table class="tbl model"><thead><tr><th>Employee</th><th>Status</th><th>Answers to</th>'
         '<th>May do alone</th><th>Signs above that</th><th class="n">AI budget a month</th></tr></thead>'
         f"<tbody>{rows}</tbody></table>"
@@ -205,7 +216,7 @@ def month_page(state: Path, person: Person) -> str:
         else "None yet"
     )
     body = "".join(
-        f'<tr><td><b>{E(row["name"])}</b></td><td class="n">{row["done"]}</td><td class="n">{row["allowed"]}</td>'
+        f'<tr><td><b>{escape(row["name"])}</b></td><td class="n">{row["done"]}</td><td class="n">{row["allowed"]}</td>'
         f'<td class="n">{row["signed"]}</td><td class="n">{row["declined"]}</td><td class="n">{row["refused"]}</td>'
         f'<td class="n">{usd(row["spent"])} of {usd(row["cap"])}</td><td class="n">{row["saved"] / 60:.1f} h</td>'
         f'<td class="n">{usd(row["per"]) if row["per"] is not None else "None"}</td></tr>'

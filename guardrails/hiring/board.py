@@ -102,11 +102,11 @@ def audit_html(rows: list[dict], ats: ATS) -> str:
 def card_page(state: Path, card_id: str, person: Person | None = None) -> str:
     card = Board.open(state / "board.json").card(card_id)
     ats = ATS.open(state)
-    flags, shortlist = ats.flags(card.id), ats.shortlist(card.id)
+    flags, shortlist = ats.flags(card.card_id), ats.shortlist(card.card_id)
     waiting = any(not flag["reviewed_by"] for flag in flags.values())
     extra = shortlist_html(ats, shortlist, waiting) if shortlist else ""
-    extra += "".join(flagged_html(ats, card.id, item, flag) for item, flag in flags.items())
-    extra += audit_html(ats.log(card.id), ats)
+    extra += "".join(flagged_html(ats, card.card_id, item, flag) for item, flag in flags.items())
+    extra += audit_html(ats.log(card.card_id), ats)
     # The hiring system's evidence goes above the runs, so the card reads as outcome first.
     page = detail(
         card, None, workspace=WORKSPACE, signed_in=signed_in_html(person) if person else ""

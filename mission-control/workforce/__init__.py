@@ -1,4 +1,4 @@
-"""AI employees for Acme's support and engineering: the manager, the support resolver and the analyst."""
+"""AI employees for KaaS's support and engineering: the manager, the support resolver and the analyst."""
 
 import os
 

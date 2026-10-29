@@ -93,13 +93,13 @@ def test_the_card_is_done_only_when_a_ticket_lands_in_time_and_both_contacts_wer
     assert tools(model.calls[6]) == set(TOOLS_EACH_AGENT_MAY_CALL[AgentName.MESSENGER])
 
     travel = Travel(board.path.parent)
-    ticket = travel.ticket(card.id)
+    ticket = travel.ticket(card.card_id)
     assert (ticket["flight"], ticket["status"], ticket["booked_by"]) == (
         "EW461",
         TicketStatus.TICKETED,
         AgentName.BOOKER,
     )
-    assert travel.told(card.id) == ["Klaus Bergmann", "Priya Shah"]
+    assert travel.told(card.card_id) == ["Klaus Bergmann", "Priya Shah"]
     assert card.column == "Done"
     assert (
         card.log[-1]
@@ -107,7 +107,7 @@ def test_the_card_is_done_only_when_a_ticket_lands_in_time_and_both_contacts_wer
     )
 
     # The gateway logged every call with who made it, and the travel system's refusal of the late flight.
-    log = read_call_log(board.path.parent, card.id)
+    log = read_call_log(board.path.parent, card.card_id)
     assert [call["agent"] for call in log] == [AgentName.TRIP_PLANNER] * 2 + [
         AgentName.BOOKER
     ] * 2 + [AgentName.MESSENGER] * 3
@@ -121,7 +121,7 @@ def test_the_card_is_done_only_when_a_ticket_lands_in_time_and_both_contacts_wer
     assert "Trip planner handed the card to Booker" in card.runs[0].steps
 
     # The card page shows the room the ticket and the refused call.
-    page = card_page(board.path.parent, card.id)
+    page = card_page(board.path.parent, card.card_id)
     assert (
         "Ticketed" in page
         and "EW461, economy" in page
@@ -187,7 +187,7 @@ def test_a_ticket_nobody_was_told_about_never_closes_the_card(board):
         work(board, board.cards[0], model=crew_model(told("Priya Shah", call_id="m2")))
     )
 
-    assert Travel(board.path.parent).ticket(card.id)["status"] == "ticketed"
+    assert Travel(board.path.parent).ticket(card.card_id)["status"] == "ticketed"
     assert card.column == "Needs you"
     assert (
         card.log[-1] == "Needs you: EW461 is ticketed but Klaus Bergmann was not told"
@@ -209,7 +209,7 @@ def test_one_agent_with_every_tool_cannot_approve_its_own_fare_over_the_cap(boar
     )
     card = asyncio.run(work(board, board.cards[0], model=model, alone=True))
 
-    ticket = Travel(board.path.parent).ticket(card.id)
+    ticket = Travel(board.path.parent).ticket(card.card_id)
     assert (ticket["status"], ticket["approved_by"]) == (
         TicketStatus.WAITING_FOR_MANAGER,
         None,
@@ -227,7 +227,7 @@ def test_one_agent_with_every_tool_cannot_approve_its_own_fare_over_the_cap(boar
     travel = Travel(board.path.parent)
     travel.approve("TK-001", approved_by="Dana Ruiz", approve=True)
     travel.send(
-        card.id, "Klaus Bergmann", "Priya lands on LH921 at 11:20.", "Messenger"
+        card.card_id, "Klaus Bergmann", "Priya lands on LH921 at 11:20.", "Messenger"
     )
     settle(board, card, Travel(board.path.parent))
     assert (
@@ -327,12 +327,12 @@ def test_only_the_signed_in_manager_can_approve_a_fare_over_the_cap(board, peopl
         web_app = app(state, TEAM, people, resume)
         async with TestClient(TestServer(web_app)) as client:
             # Nobody is signed in: every page and the approval itself send them to the sign-in page.
-            for path in ("/", "/team", f"/cards/{card.id}"):
+            for path in ("/", "/team", f"/cards/{card.card_id}"):
                 assert (await client.get(path, allow_redirects=False)).headers[
                     "Location"
                 ] == "/login"
             denied = await client.post(
-                f"/cards/{card.id}/approve", data={}, allow_redirects=False
+                f"/cards/{card.card_id}/approve", data={}, allow_redirects=False
             )
             assert denied.headers["Location"] == "/login"
             wrong = await client.post(
@@ -344,14 +344,16 @@ def test_only_the_signed_in_manager_can_approve_a_fare_over_the_cap(board, peopl
             await sign_in(client, "Priya Shah", "priya-passphrase")
             form = {"decision": "approve", "approved_by": "Dana Ruiz"}
             await client.post(
-                f"/cards/{card.id}/approve", data=form, allow_redirects=False
+                f"/cards/{card.card_id}/approve", data=form, allow_redirects=False
             )
             assert (
-                Travel(state).ticket(card.id)["status"]
+                Travel(state).ticket(card.card_id)["status"]
                 == TicketStatus.WAITING_FOR_MANAGER
             )
             refused = [
-                call for call in read_call_log(state, card.id) if not call["allowed"]
+                call
+                for call in read_call_log(state, card.card_id)
+                if not call["allowed"]
             ]
             assert [(call["agent"], call["tool"]) for call in refused] == [
                 ("Priya Shah", "approve_fare")
@@ -360,12 +362,12 @@ def test_only_the_signed_in_manager_can_approve_a_fare_over_the_cap(board, peopl
 
             # Dana signs in and approves; only the messenger runs, and then the card is Done.
             await sign_in(client, "Dana Ruiz", "dana-passphrase")
-            page = await (await client.get(f"/cards/{card.id}")).text()
+            page = await (await client.get(f"/cards/{card.card_id}")).text()
             assert (
                 "Signed in as <b>Dana Ruiz</b>, manager" in page and "Approve" in page
             )
             await client.post(
-                f"/cards/{card.id}/approve",
+                f"/cards/{card.card_id}/approve",
                 data={"decision": "approve"},
                 allow_redirects=False,
             )
@@ -373,15 +375,15 @@ def test_only_the_signed_in_manager_can_approve_a_fare_over_the_cap(board, peopl
 
     asyncio.run(scenario())
     travel = Travel(state)
-    ticket = travel.ticket(card.id)
+    ticket = travel.ticket(card.card_id)
     assert (ticket["status"], ticket["approved_by"]) == (
         TicketStatus.TICKETED,
         "Dana Ruiz",
     )
-    assert travel.told(card.id) == ["Klaus Bergmann", "Priya Shah"]
-    assert Board.open(board.path).card(card.id).column == Column.DONE
-    assert "Dana Ruiz, signed in at" in card_page(state, card.id)
-    used_by_resume = {call["agent"] for call in read_call_log(state, card.id)[-4:]}
+    assert travel.told(card.card_id) == ["Klaus Bergmann", "Priya Shah"]
+    assert Board.open(board.path).card(card.card_id).column == Column.DONE
+    assert "Dana Ruiz, signed in at" in card_page(state, card.card_id)
+    used_by_resume = {call["agent"] for call in read_call_log(state, card.card_id)[-4:]}
     assert (
         AgentName.MESSENGER in used_by_resume and AgentName.BOOKER not in used_by_resume
     )

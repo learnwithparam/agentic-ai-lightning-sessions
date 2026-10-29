@@ -64,7 +64,7 @@ INSTRUCTIONS = (
 
 def server(brain: Path, state: Path, card: Card) -> MCPServerStdio:
     """The brain's MCP server, one process per card. It inherits no keys, so a tool cannot spend any."""
-    args = ["-m", "brain.server", "--brain", str(brain), "--state", str(state), "--card", card.id]
+    args = ["-m", "brain.server", "--brain", str(brain), "--state", str(state), "--card", card.card_id]
     return MCPServerStdio(
         {"command": sys.executable, "args": args, "cwd": str(ROOT)},
         name="brain",
@@ -94,9 +94,9 @@ def tidy(text: str) -> str:
 
 
 def settle(board: Board, card: Card, state: Path) -> None:
-    cited = citations(state, card.id)
-    refused = [call for call in calls(state, card.id) if call["tool"] == "cite" and not call["allowed"]]
-    by_owner = [call for call in calls(state, card.id) if call["tool"] == "cite" and call["by"] == OWNER]
+    cited = citations(state, card.card_id)
+    refused = [call for call in calls(state, card.card_id) if call["tool"] == "cite" and not call["allowed"]]
+    by_owner = [call for call in calls(state, card.card_id) if call["tool"] == "cite" and call["by"] == OWNER]
     if by_owner and by_owner[-1]["allowed"]:
         note = by_owner[-1]["args"]["note"]
         card.sources = [note]
@@ -120,7 +120,7 @@ def answer_for_client(
     args = {"answer": answer, "source": source}
     try:
         note = Vault(brain).file_answer(
-            card.id,
+            card.card_id,
             card.title,
             card.customer,
             answer,
@@ -130,12 +130,12 @@ def answer_for_client(
             on_date or date.today().isoformat(),
         )
     except Refused as refusal:
-        log_call(state, card.id, "answer_for_client", args, False, f"Refused: {refusal}", person)
+        log_call(state, card.card_id, "answer_for_client", args, False, f"Refused: {refusal}", person)
         raise
-    log_call(state, card.id, "answer_for_client", args, True, f"Filed {note.name}", person)
+    log_call(state, card.card_id, "answer_for_client", args, True, f"Filed {note.name}", person)
     log_call(
         state,
-        card.id,
+        card.card_id,
         "cite",
         {"note": note.name, "quote": note.facts[0]},
         True,
@@ -171,9 +171,9 @@ async def work(board: Board, card: Card, model: Model | str | None = None, brain
             succeeded = False
             said = f"run failed: {type(failure).__name__}"
     card.answer = tidy(said) if succeeded else ""
-    lines = [f"{call['tool']} {', '.join(call['args'].values())[:70]}" for call in calls(state, card.id)]
+    lines = [f"{call['tool']} {', '.join(call['args'].values())[:70]}" for call in calls(state, card.card_id)]
     refusals = [
-        call["said"].replace("Refused: ", "", 1) for call in calls(state, card.id) if not call["allowed"]
+        call["said"].replace("Refused: ", "", 1) for call in calls(state, card.card_id) if not call["allowed"]
     ]
     run = Run(RESEARCHER, usage.input_tokens, usage.output_tokens, price(usage), succeeded, said, lines)
     card.runs.append(run)
@@ -185,14 +185,14 @@ async def work(board: Board, card: Card, model: Model | str | None = None, brain
 def report(board: Board, card: Card) -> None:
     """One question as the room reads it off a projector: each brain call, the answer, where it landed."""
     print(paint(f"{card.customer} asks: {card.title}", "1"))
-    for call in calls(board.path.parent, card.id):
+    for call in calls(board.path.parent, card.card_id):
         args = ", ".join(call["args"].values())
         line = f"  {call['tool']}({args[:64]}{'...' if len(args) > 64 else ''})"
         print(line if call["allowed"] else paint(line + "  refused", "1;31"))
     if card.column == "Done":
         print("  " + card.answer.strip().replace("\n", "\n  "))
     tone = "1;32" if card.column == "Done" else "1;33"
-    print(paint(f"{card.id} {card.column}: {card.log[-1].split(': ', 1)[-1]}", tone))
+    print(paint(f"{card.card_id} {card.column}: {card.log[-1].split(': ', 1)[-1]}", tone))
 
 
 async def naive(model: Model | str) -> None:

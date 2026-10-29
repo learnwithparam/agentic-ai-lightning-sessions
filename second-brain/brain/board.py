@@ -78,10 +78,10 @@ def card_page(state: Path, card_id: str, vault: Vault, person: Person) -> str:
     card = Board.open(state / "board.json").card(card_id)
     # The board's own receipt shows chips only; the brain's shows each quote, so it replaces it.
     shown = detail(replace(card, sources=[]), None, workspace=WORKSPACE, signed_in=signed_in_html(person))
-    extra = cited_html(vault, state, card.id, card.answer)
+    extra = cited_html(vault, state, card.card_id, card.answer)
     if card.column == "Needs you":
-        extra += answer_form_html(card.id)
-    extra += calls_html(calls(state, card.id))
+        extra += answer_form_html(card.card_id)
+    extra += calls_html(calls(state, card.card_id))
     return with_css(shown.replace('<h2 class="sec">Runs</h2>', extra + '<h2 class="sec">Runs</h2>', 1))
 
 

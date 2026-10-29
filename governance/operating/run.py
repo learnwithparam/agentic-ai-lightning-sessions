@@ -117,13 +117,13 @@ async def work(
     the_model: Model | str,
     narrate: Callable[[str], None] | None = None,
 ) -> None:
-    spec = job(card.id)
+    spec = job(card.card_id)
     key, name = spec["agent"], policy.AGENTS[spec["agent"]]["name"]
     card.employee = name
     stop = policy.start(key, spent(desk.board, name))
     if stop:
         desk.record.add(
-            card.id, name, spec["says"], "not started", stop.rule, decider="policy"
+            card.card_id, name, spec["says"], "not started", stop.rule, decider="policy"
         )
     else:
         desk.board.move(card, "In flight", "run started")
@@ -143,22 +143,23 @@ async def work(
                 )
             )
     say(
-        f"{card.id}  {name}, {card.customer}".ljust(WIDTH - 9) + f"{usd(card.cost):>9}",
+        f"{card.card_id}  {name}, {card.customer}".ljust(WIDTH - 9)
+        + f"{usd(card.cost):>9}",
         "1;36",
     )
-    for row in desk.record.for_card(card.id):
+    for row in desk.record.for_card(card.card_id):
         show(row)
     if stop:
         desk.board.move(card, "Needs you", stop.rule)
     elif result.waiting:
-        hold(state, waiting(state) | {card.id: result.waiting})
+        hold(state, waiting(state) | {card.card_id: result.waiting})
         desk.board.move(
             card,
             "Needs you",
             f"waiting for {result.waiting['signer']}: {result.waiting['rule']}",
         )
-    elif desk.systems.written(card.id):
-        held = desk.systems.written(card.id)
+    elif desk.systems.written(card.card_id):
+        held = desk.systems.written(card.card_id)
         card.issue = f"{town(spec['hotel'])}, {held['ref']}"
         desk.board.move(card, "Done", f"allowed by policy: {result.did}")
     else:

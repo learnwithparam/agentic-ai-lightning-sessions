@@ -143,7 +143,9 @@ def test_a_shift_over_budget_pauses_for_ingrid(tmp_path, monkeypatch):
     pause = paused.card(run.PAUSE_CARD)
     assert pause.column == "Needs you" and "Ingrid Halvorsen decides" in pause.log[-1]
     assert (tmp_path / run.PAUSED).exists() and budget.over(paused)
-    waiting = [card.id for card in paused.cards if card.id in run.ALERT_IDS and card.column != "Done"]
+    waiting = [
+        card.card_id for card in paused.cards if card.card_id in run.ALERT_IDS and card.column != "Done"
+    ]
     assert waiting and "A-07" in waiting, "the alerts after the pause have not run"
     assert not any(card.column == "In flight" for card in paused.cards)
     page = board.board_page(tmp_path, INGRID)

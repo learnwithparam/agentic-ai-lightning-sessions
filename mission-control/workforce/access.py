@@ -16,6 +16,10 @@ import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from workforce.people import Person
 
 POLICY = Path(__file__).resolve().parent.parent / "deploy" / "policy.json"
 # Which desks each guarded tool works on; a guarded tool missing here is refused, never let through.
@@ -59,7 +63,7 @@ class Badge:
 @dataclass
 class Keycloak:
     url: str
-    realm: str = "acme"
+    realm: str = "kaas"
     secrets: dict[str, str] = field(default_factory=dict)
 
     @property
@@ -101,12 +105,12 @@ class OpenFGA:
     model: str = ""
 
     def setup(self, policy: Path = POLICY) -> OpenFGA:
-        """Find or create the acme store, write the model and its tuples. Safe to run on every start."""
+        """Find or create the kaas store, write the model and its tuples. Safe to run on every start."""
         spec = json.loads(policy.read_text())
         stores = http(f"{self.url}/stores")["stores"]
         self.store = (
-            next((s["id"] for s in stores if s["name"] == "acme"), "")
-            or http(f"{self.url}/stores", {"name": "acme"})["id"]
+            next((store["id"] for store in stores if store["name"] == "kaas"), "")
+            or http(f"{self.url}/stores", {"name": "kaas"})["id"]
         )
         self.model = http(f"{self.url}/stores/{self.store}/authorization-models", spec["model"])[
             "authorization_model_id"
@@ -135,40 +139,33 @@ class Access:
     check: Check
     badge: Callable[[str], Badge]
     user: str = ""
-    approvers: dict[str, str] = field(default_factory=dict)
 
     def refuse(self, agent: str, tool: str) -> str | None:
         """Why this employee may not run this tool for this person, or None when it may."""
         desks = DESKS.get(tool)
         if desks is None:
             return f"{tool} is on no desk"
-        b = self.badge(agent)
-        worked = [d for d in desks if self.check(f"agent:{b.agent}", "employee", f"desk:{d}")]
+        badge = self.badge(agent)
+        worked = [desk for desk in desks if self.check(f"agent:{badge.agent}", "employee", f"desk:{desk}")]
         if not worked:
             return f"{agent} does not work the {' or '.join(desks)} desk"
-        if not any(self.check(f"user:{b.user}", "staff", f"desk:{d}") for d in worked):
+        if not any(self.check(f"user:{badge.user}", "staff", f"desk:{desk}") for desk in worked):
             desk = " or ".join(worked)
-            return f"{b.user} has no access to the {desk} desk, so {agent} may not act there for them"
+            return f"{badge.user} has no access to the {desk} desk, so {agent} may not act there for them"
         return None
-
-    def may_approve(self, who: str, desk: str = "support") -> bool:
-        # A channel id is not a person until policy.json or MISSION_APPROVERS names one,
-        # so an unknown id is refused.
-        user = self.approvers.get(who)
-        return user is not None and self.check(f"user:{user}", "can_approve", f"desk:{desk}")
 
     @classmethod
     def from_env(cls, user: str = "", password: str = "") -> Access | None:
-        kc, fga = os.environ.get("KEYCLOAK_URL"), os.environ.get("OPENFGA_URL")
-        if not (kc and fga):
+        keycloak_url, openfga_url = os.environ.get("KEYCLOAK_URL"), os.environ.get("OPENFGA_URL")
+        if not (keycloak_url and openfga_url):
             return None
         user = user or os.environ.get("MISSION_USER") or "param"
         password = password or os.environ.get("MISSION_PASSWORD") or f"{user}-local"
         secrets = {
-            c: os.environ.get(f"KEYCLOAK_SECRET_{c.upper().replace('-', '_')}") or f"{c}-local"
-            for c in ("manager", "support-resolver", "engineering-analyst")
+            client: os.environ.get(f"KEYCLOAK_SECRET_{client.upper().replace('-', '_')}") or f"{client}-local"
+            for client in ("manager", "support-resolver", "engineering-analyst")
         }
-        keycloak, policy = Keycloak(kc, secrets=secrets), OpenFGA(fga).setup()
+        keycloak, policy = Keycloak(keycloak_url, secrets=secrets), OpenFGA(openfga_url).setup()
         token, badges = keycloak.sign_in(user, password), {}
 
         def badge(agent: str) -> Badge:
@@ -176,7 +173,18 @@ class Access:
                 badges[agent] = keycloak.badge(token, agent)
             return badges[agent]
 
-        approvers = json.loads(POLICY.read_text())["approvers"] | dict(
-            pair.split("=", 1) for pair in os.environ.get("MISSION_APPROVERS", "").split(",") if "=" in pair
-        )
-        return cls(policy.check, badge, user, approvers)
+        return cls(policy.check, badge, user)
+
+
+def may_post_to_customer(person: Person, access: Access | None) -> str | None:
+    """Why this person may not post a customer reply, or None when they may.
+
+    OpenFGA decides when the stack runs; otherwise the sign-in role does, with the same words.
+    """
+    if access is not None and person.user:
+        allowed = access.check(f"user:{person.user}", "can_approve", "desk:support")
+    else:
+        allowed = person.role == "support approver"
+    if allowed:
+        return None
+    return f"{person.name} may not approve this: only a support approver can post to a customer"

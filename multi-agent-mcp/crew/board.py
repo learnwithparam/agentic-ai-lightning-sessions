@@ -93,7 +93,7 @@ def calls_html(calls: list[dict]) -> str:
 
 def approval_form_html(card: Card, ticket: dict, trip: dict) -> str:
     return (
-        f'<form method="post" action="/cards/{escape(card.id)}/approve" class="decide">'
+        f'<form method="post" action="/cards/{escape(card.card_id)}/approve" class="decide">'
         f"<p>£{ticket['fare']} on {escape(ticket['flight'])} is over the £{trip['fare_cap']} cap. "
         f"Only {escape(trip['manager'])} can approve it.</p>"
         '<button name="decision" value="approve">Approve</button> '
@@ -109,7 +109,7 @@ def card_page(state: Path, card_id: str, person: Person | None = None) -> str:
     board = Board.open(state / "board.json")
     card = board.card(card_id)
     travel = Travel(state)
-    ticket = travel.ticket(card.id)
+    ticket = travel.ticket(card.card_id)
     trip = travel.trip() if ticket else {}
     page = detail(
         card,
@@ -120,9 +120,9 @@ def card_page(state: Path, card_id: str, person: Person | None = None) -> str:
     waiting = (
         ticket is not None and ticket["status"] == TicketStatus.WAITING_FOR_MANAGER
     )
-    extra = ticket_html(ticket, trip, travel.told(card.id)) if ticket else ""
+    extra = ticket_html(ticket, trip, travel.told(card.card_id)) if ticket else ""
     extra += approval_form_html(card, ticket, trip) if waiting and person else ""
-    extra += calls_html(read_call_log(state, card.id))
+    extra += calls_html(read_call_log(state, card.card_id))
     # The crew's evidence goes above the runs, so the card reads as outcome first, then how it got there.
     page = page.replace(
         '<h2 class="sec">Runs</h2>', extra + '<h2 class="sec">Runs</h2>', 1
@@ -188,8 +188,8 @@ class BoardPages:
         except StopIteration:
             raise web.HTTPNotFound() from None
         travel = Travel(self.state)
-        ticket = travel.ticket(card.id)
-        card_url = f"/cards/{card.id}"
+        ticket = travel.ticket(card.card_id)
+        card_url = f"/cards/{card.card_id}"
         if ticket is None:
             raise web.HTTPSeeOther(card_url)
         approving = form.get("decision") == "approve"
@@ -200,7 +200,7 @@ class BoardPages:
         except Refused as refusal:
             write_call_log_row(
                 call_log,
-                card.id,
+                card.card_id,
                 person.name,
                 "approve_fare",
                 arguments,
@@ -211,7 +211,7 @@ class BoardPages:
         verb = "approved" if approving else "declined"
         said = f"{verb} {ticket['id']}"
         write_call_log_row(
-            call_log, card.id, person.name, "approve_fare", arguments, True, said
+            call_log, card.card_id, person.name, "approve_fare", arguments, True, said
         )
         self.carry_on(request.app, board, card, approving)
         raise web.HTTPSeeOther(card_url)

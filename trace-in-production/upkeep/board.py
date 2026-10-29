@@ -18,7 +18,7 @@ from upkeep.crew import PLANNER, TRIAGE
 from upkeep.ledger import langfuse
 from upkeep.plant import MACHINES, PROCEDURES, Cmms, Refused
 from upkeep.run import PAUSE_CARD, PAUSED, allow_continue, continue_shift
-from workforce.board import WEB, Board, Card, E, Role, chips, detail, render, team, usd
+from workforce.board import WEB, Board, Card, Role, chips, detail, escape, render, team, usd
 from workforce.people import PERSON, Person, people_or_exit, require_sign_in, signed_in_html
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -50,13 +50,13 @@ def langfuse_url(card_id: str) -> str:
 
 def spend_html(board: Board, state: Path) -> str:
     rows = "".join(
-        f"<tr><td>{E(who)}</td><td class=n>{count}</td><td class=n>{killed}</td>"
+        f"<tr><td>{escape(who)}</td><td class=n>{count}</td><td class=n>{killed}</td>"
         f"<td class=n>{usd(spent)}</td></tr>"
         for who, (count, killed, spent) in budget.by_employee(board).items()
     )
     total, cap = budget.spent(board), usd(budget.budget_usd())
     status = (
-        f'<div class="verdict no"><b>Over budget: paused for {E(budget.LEAD)}</b>'
+        f'<div class="verdict no"><b>Over budget: paused for {escape(budget.LEAD)}</b>'
         f"<span>{usd(total)} spent of the {cap} budget.</span></div>"
         if (state / PAUSED).exists()
         else f'<div class="verdict ok"><b>Within budget</b><span>{usd(total)} of {cap} spent.</span></div>'
@@ -71,17 +71,20 @@ def spend_html(board: Board, state: Path) -> str:
 
 
 def order_html(card: Card, cmms: Cmms) -> str:
-    order = cmms.covering(card.id)
-    trace = f'<p class="trace"><a href="{E(langfuse_url(card.id))}">Its runs in Langfuse</a></p>'
+    order = cmms.covering(card.card_id)
+    trace = f'<p class="trace"><a href="{escape(langfuse_url(card.card_id))}">Its runs in Langfuse</a></p>'
     if not order:
-        why = cmms.dismissed.get(card.id)
-        return trace + (f'<div class="receipt order"><h4>Dismissed</h4><p>{E(why)}</p></div>' if why else "")
+        why = cmms.dismissed.get(card.card_id)
+        return trace + (
+            f'<div class="receipt order"><h4>Dismissed</h4><p>{escape(why)}</p></div>' if why else ""
+        )
     procedure = PROCEDURES[order.procedure]
     return trace + (
-        f'<div class="receipt order"><h4>{E(order.order_id)} in the maintenance system</h4>'
-        f"<p>{E(MACHINES[order.machine]['name'])}: {E(procedure['steps'])}.</p>"
-        f"<p>{E(procedure['part'])}, {E(procedure['skill'])}, {procedure['hours']:g} h, "
-        f"{E(order.priority)} priority. Alerts on this order: {E(', '.join(order.alerts))}.</p></div>"
+        f'<div class="receipt order"><h4>{escape(order.order_id)} in the maintenance system</h4>'
+        f"<p>{escape(MACHINES[order.machine]['name'])}: {escape(procedure['steps'])}.</p>"
+        f"<p>{escape(procedure['part'])}, {escape(procedure['skill'])}, {procedure['hours']:g} h, "
+        f"{escape(order.priority)} priority. "
+        f"Alerts on this order: {escape(', '.join(order.alerts))}.</p></div>"
     )
 
 
@@ -89,17 +92,17 @@ def pause_html(card: Card, state: Path) -> str:
     """The pause card: the question, the form while the shift waits, and every attempt on it."""
     rows = (
         "".join(
-            f'<tr class="{"no" if row["decision"] == "refused" else ""}"><td>{E(row["by"])}</td>'
+            f'<tr class="{"no" if row["decision"] == "refused" else ""}"><td>{escape(row["by"])}</td>'
             f"<td>{chips([row['decision']], 'red' if row['decision'] == 'refused' else 'green')}</td>"
-            f'<td class="said">{E(row["said"])}</td><td>{E(row["at"])}</td></tr>'
+            f'<td class="said">{escape(row["said"])}</td><td>{escape(row["at"])}</td></tr>'
             for row in budget.decisions(state)
         )
         or '<tr><td colspan="4">No decisions yet.</td></tr>'
     )
     form = (
         '<div class="receipt open"><h4>The shift is paused</h4>'
-        f"<p>{E(budget.LEAD)} decides whether the rest of the alerts run past the budget.</p>"
-        f'<form method="post" action="/cards/{E(card.id)}/continue" class="decide">'
+        f"<p>{escape(budget.LEAD)} decides whether the rest of the alerts run past the budget.</p>"
+        f'<form method="post" action="/cards/{escape(card.card_id)}/continue" class="decide">'
         '<button class="btn dark">Continue the shift</button></form></div>'
         if (state / PAUSED).exists()
         else ""
@@ -128,7 +131,9 @@ def card_page(state: Path, card_id: str, person: Person) -> str:
     card = Board.open(state / "board.json").card(card_id)
     page = detail(card, None, workspace=WORKSPACE, signed_in=signed_in_html(person))
     extra = (
-        pause_html(card, state) if card.id == PAUSE_CARD else order_html(card, Cmms.open(state / "cmms.json"))
+        pause_html(card, state)
+        if card.card_id == PAUSE_CARD
+        else order_html(card, Cmms.open(state / "cmms.json"))
     )
     return with_css(page.replace('<h2 class="sec">Runs</h2>', extra + '<h2 class="sec">Runs</h2>', 1))
 

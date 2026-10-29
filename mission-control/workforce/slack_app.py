@@ -23,26 +23,27 @@ MEMORY = Path(os.environ.get("WORKFORCE_MEMORY", Path(__file__).resolve().parent
 def render(reply: Reply) -> str:
     if not reply.sources:
         return reply.text
-    links = "\n".join(f"• <{s.url}|{s.id}> {s.title}" for s in reply.sources)
+    links = "\n".join(f"• <{source.url}|{source.source_id}> {source.title}" for source in reply.sources)
     return f"{reply.text}\n\n*Sources*\n{links}"
 
 
 async def on_mention(event: dict, client, readers: Readers, memory: Path = MEMORY, model=None) -> str:
     """Read the thread the bot was tagged in, answer as the user who tagged it, and reply in the thread."""
-    channel, ts = event["channel"], event.get("thread_ts") or event["ts"]
-    history = await client.conversations_replies(channel=channel, ts=ts)
+    channel = event["channel"]
+    thread_ts = event.get("thread_ts") or event["ts"]
+    history = await client.conversations_replies(channel=channel, ts=thread_ts)
     thread = [
-        (m.get("user", "bot"), MENTION.sub("", m.get("text", "")))
-        for m in history["messages"]
-        if m.get("ts") != event["ts"] and not m.get("bot_id")
+        (message.get("user", "bot"), MENTION.sub("", message.get("text", "")))
+        for message in history["messages"]
+        if message.get("ts") != event["ts"] and not message.get("bot_id")
     ]
-    session = SQLiteSession(f"{channel}:{ts}", str(memory))
+    session = SQLiteSession(f"{channel}:{thread_ts}", str(memory))
     asker = readers.as_user(event["user"])
     reply = await answer(
         MENTION.sub("", event["text"]), readers=asker, thread=thread, session=session, model=model
     )
     text = render(reply)
-    await client.chat_postMessage(channel=channel, thread_ts=ts, text=text)
+    await client.chat_postMessage(channel=channel, thread_ts=thread_ts, text=text)
     return text
 
 

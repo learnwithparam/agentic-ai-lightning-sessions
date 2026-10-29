@@ -1,0 +1,14 @@
+[
+ {
+  "name": "Param",
+  "role": "support approver",
+  "passphrase_env": "BOARD_PASSPHRASE_PARAM",
+  "user": "param"
+ },
+ {
+  "name": "Sam",
+  "role": "contractor",
+  "passphrase_env": "BOARD_PASSPHRASE_SAM",
+  "user": "sam"
+ }
+]

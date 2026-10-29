@@ -6,7 +6,7 @@ name: mission-control
 x-langfuse-env: &langfuse-env
   NEXTAUTH_URL: http://localhost:8270
   DATABASE_URL: postgresql://postgres:postgres@postgres:5432/postgres
-  SALT: acme-local-salt
+  SALT: kaas-local-salt
   ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
   TELEMETRY_ENABLED: "false"
   CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
@@ -52,7 +52,7 @@ services:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin-local
     volumes:
-      - ./deploy/realm.json:/opt/keycloak/data/import/acme.json:ro
+      - ./deploy/realm.json:/opt/keycloak/data/import/kaas.json:ro
     healthcheck:
       # The image has no curl; bash's /dev/tcp asks the management port for /health/ready.
       test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q UP <&3"]
@@ -85,17 +85,17 @@ services:
       <<: *langfuse-env
       # Next binds to the container's hostname by default, so the loopback healthcheck below never answers.
       HOSTNAME: 0.0.0.0
-      NEXTAUTH_SECRET: acme-local-nextauth
+      NEXTAUTH_SECRET: kaas-local-nextauth
       # Headless setup: the org, project, API keys and one login exist on first start, so no clicking.
-      LANGFUSE_INIT_ORG_ID: acme
-      LANGFUSE_INIT_ORG_NAME: Acme
+      LANGFUSE_INIT_ORG_ID: kaas
+      LANGFUSE_INIT_ORG_NAME: KaaS
       LANGFUSE_INIT_PROJECT_ID: mission-control
       LANGFUSE_INIT_PROJECT_NAME: Mission Control
-      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: pk-lf-acme-local
-      LANGFUSE_INIT_PROJECT_SECRET_KEY: sk-lf-acme-local
-      LANGFUSE_INIT_USER_EMAIL: support@acme.example
-      LANGFUSE_INIT_USER_NAME: Acme support
-      LANGFUSE_INIT_USER_PASSWORD: acme-local
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: pk-lf-kaas-local
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: sk-lf-kaas-local
+      LANGFUSE_INIT_USER_EMAIL: support@kaas.example
+      LANGFUSE_INIT_USER_NAME: KaaS support
+      LANGFUSE_INIT_USER_PASSWORD: kaas-local
     healthcheck:
       test: wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/api/public/health || exit 1
       interval: 5s

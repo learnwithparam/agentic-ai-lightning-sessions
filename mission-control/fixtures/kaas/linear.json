@@ -5,7 +5,7 @@
   "state": "In Progress",
   "assignee": "Data squad",
   "description": "Root cause of the export timeouts: the export runs inside one web request and the load balancer cuts it at 30 seconds. The background job ships in release 2.14.",
-  "url": "https://linear.app/acme/issue/EXP-41",
+  "url": "https://linear.app/kaas/issue/EXP-41",
   "access": [
    "engineering",
    "support"
@@ -17,7 +17,7 @@
   "state": "Backlog",
   "assignee": "Web squad",
   "description": "Follow the new design tokens.",
-  "url": "https://linear.app/acme/issue/WEB-210",
+  "url": "https://linear.app/kaas/issue/WEB-210",
   "access": [
    "engineering",
    "contractors"

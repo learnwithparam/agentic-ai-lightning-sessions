@@ -6,5 +6,8 @@
  "release-process": [
   "engineering",
   "contractors"
+ ],
+ "refunds": [
+  "support"
  ]
 }

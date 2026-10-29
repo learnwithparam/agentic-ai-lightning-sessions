@@ -139,7 +139,7 @@ def open_gateway(agent: AgentName, state: Path, card: Card) -> MCPServerStdio:
         "--state",
         str(state),
         "--card",
-        card.id,
+        card.card_id,
     ]
     return MCPServerStdio(
         {"command": sys.executable, "args": gateway_arguments, "cwd": str(ROOT)},
@@ -217,7 +217,7 @@ def build_solo(gateway: MCPServerStdio, model: Model | str) -> Agent:
 
 
 def settle(board: Board, card: Card, travel: Travel) -> None:
-    ticket = travel.ticket(card.id)
+    ticket = travel.ticket(card.card_id)
     trip = travel.trip()
     if ticket is None:
         board.move(card, Column.BACKLOG, "no flight was booked")
@@ -226,7 +226,7 @@ def settle(board: Board, card: Card, travel: Travel) -> None:
         waiting = f"£{ticket['fare']} on {ticket['flight']} waits for {trip['manager']}"
         board.move(card, Column.NEEDS_YOU, waiting)
         return
-    not_told = sorted(set(trip["contacts"]) - set(travel.told(card.id)))
+    not_told = sorted(set(trip["contacts"]) - set(travel.told(card.card_id)))
     if not_told:
         unsent = (
             f"{ticket['flight']} is ticketed but {', '.join(not_told)} was not told"
@@ -244,7 +244,7 @@ def settle(board: Board, card: Card, travel: Travel) -> None:
 def gateway_refusals(state: Path, card: Card) -> list[GatewayRefusal]:
     return [
         GatewayRefusal(row["agent"], row["said"])
-        for row in read_call_log(state, card.id)
+        for row in read_call_log(state, card.card_id)
         if not row["allowed"]
     ]
 
@@ -286,9 +286,7 @@ async def run_employees(
     state = board.path.parent
     board.move(card, Column.IN_FLIGHT, f"{employees[0]} picked it up")
     steps = LiveSteps() if live else Steps()
-    prompt = (
-        f"Card {card.id}: {card.title}\nTraveller: {card.customer}\nTrip: {card.issue}"
-    )
+    prompt = f"Card {card.card_id}: {card.title}\nTraveller: {card.customer}\nTrip: {card.issue}"
     refused_before = len(gateway_refusals(state, card))
     async with AsyncExitStack() as stack:
         gateways = {
@@ -340,7 +338,7 @@ async def work(
     card = await run_employees(board, card, employees, build_first_agent, model, live)
     # A real model sometimes hands over before booking; with no ticket the crew tries again.
     for _ in range(EXTRA_ATTEMPTS_WITHOUT_A_TICKET):
-        if alone or Travel(board.path.parent).ticket(card.id):
+        if alone or Travel(board.path.parent).ticket(card.card_id):
             break
         card = await run_employees(
             board, card, employees, build_first_agent, model, live
@@ -363,7 +361,7 @@ async def resume_after_approval(
 
 def report(board: Board, card: Card) -> None:
     """The result as the room reads it off a projector, after the live lines."""
-    ticket = Travel(board.path.parent).ticket(card.id)
+    ticket = Travel(board.path.parent).ticket(card.card_id)
     if ticket:
         is_ticketed = ticket["status"] == TicketStatus.TICKETED
         status = paint(ticket["status"], Tone.GREEN if is_ticketed else Tone.YELLOW)
@@ -375,7 +373,7 @@ def report(board: Board, card: Card) -> None:
     outcome = card.log[-1].split(": ", 1)[-1]
     print(
         paint(
-            f"{card.id} {card.column}: {outcome}",
+            f"{card.card_id} {card.column}: {outcome}",
             Tone.GREEN if card.column == Column.DONE else Tone.YELLOW,
         )
     )

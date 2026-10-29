@@ -44,11 +44,11 @@ class Desk:
         return None
 
     def keep(self, rows: list[Source]) -> str:
-        for r in rows:
-            self.read[r.id] = r
+        for row in rows:
+            self.read[row.source_id] = row
         if not rows:
             return "No results."
-        return "\n\n".join(f"[{r.id}] {r.title}\n{r.text}" for r in rows)
+        return "\n\n".join(f"[{row.source_id}] {row.title}\n{row.text}" for row in rows)
 
 
 @function_tool
@@ -92,8 +92,8 @@ DASHES = str.maketrans(dict.fromkeys("\u2010\u2011\u2012\u2013\u2014\u2212", "-"
 
 def check_citations(text: str, read: dict[str, Source]) -> Reply:
     cited, dropped = [], []
-    for m in CITE.finditer(text):
-        sid = m.group(1).translate(DASHES)
+    for match in CITE.finditer(text):
+        sid = match.group(1).translate(DASHES)
         if sid in read:
             if read[sid] not in cited:
                 cited.append(read[sid])
@@ -104,7 +104,7 @@ def check_citations(text: str, read: dict[str, Source]) -> Reply:
     for sid, src in read.items():
         if src not in cited and re.search(rf"(?<![\w#-]){re.escape(sid)}(?![\w-])", plain):
             cited.append(src)
-    clean = CITE.sub(lambda m: m.group(0) if m.group(1).translate(DASHES) in read else "", text)
+    clean = CITE.sub(lambda match: match.group(0) if match.group(1).translate(DASHES) in read else "", text)
     return Reply(re.sub(r"[ \t]+([.,;:])", r"\1", clean).strip(), cited, dropped)
 
 

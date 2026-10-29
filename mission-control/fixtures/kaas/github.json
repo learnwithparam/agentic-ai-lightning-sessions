@@ -1,11 +1,11 @@
 [
  {
   "number": 412,
-  "title": "CSV export times out on workspaces over 50,000 tasks",
+  "title": "CSV export times out on a 61,000-task workspace",
   "state": "open",
-  "author": "globex-ops",
+  "author": "customer",
   "body": "Since Monday our weekly CSV export fails with a 504 after 30 seconds. Our workspace has 61,000 tasks and our finance team needs this file every Friday.",
-  "url": "https://github.com/acme/app/issues/412",
+  "url": "https://github.com/kaas/app/issues/412",
   "labels": [
    "bug",
    "customer"
@@ -17,12 +17,28 @@
   "comments": []
  },
  {
+  "number": 415,
+  "title": "Refund the annual plan after the export timeout",
+  "state": "open",
+  "author": "customer",
+  "body": "The weekly export has failed since Monday and we are not using the product. We would like a refund of our annual plan, bought three weeks ago.",
+  "url": "https://github.com/kaas/app/issues/415",
+  "labels": [
+   "billing",
+   "customer"
+  ],
+  "access": [
+   "support"
+  ],
+  "comments": []
+ },
+ {
   "number": 398,
   "title": "Stream CSV rows instead of building the export file in memory",
   "state": "closed",
-  "author": "dana-data",
+  "author": "engineer",
   "body": "Merged in #401. Memory use is fine now, but a large export still runs inside one web request, so it hits the load balancer's 30 second limit.",
-  "url": "https://github.com/acme/app/issues/398",
+  "url": "https://github.com/kaas/app/issues/398",
   "labels": [
    "exports"
   ],
@@ -37,7 +53,7 @@
   "state": "open",
   "author": "lee-web",
   "body": "Design is ready in Figma.",
-  "url": "https://github.com/acme/app/issues/377",
+  "url": "https://github.com/kaas/app/issues/377",
   "labels": [
    "frontend"
   ],

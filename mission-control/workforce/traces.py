@@ -33,24 +33,24 @@ def ids(raw: str, size: int) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()[:size]
 
 
-def nanos(at: str | None) -> str:
-    return str(int(datetime.fromisoformat(at).timestamp() * 1e9)) if at else "0"
+def nanos(moment: str | None) -> str:
+    return str(int(datetime.fromisoformat(moment).timestamp() * 1e9)) if moment else "0"
 
 
 def attrs(values: dict[str, Any]) -> list[dict]:
     out = []
-    for k, v in values.items():
-        if v is None:
+    for label, item in values.items():
+        if item is None:
             continue
-        if isinstance(v, bool | str):
-            value = {"boolValue": v} if isinstance(v, bool) else {"stringValue": v}
-        elif isinstance(v, int):
-            value = {"intValue": str(v)}
-        elif isinstance(v, float):
-            value = {"doubleValue": v}
+        if isinstance(item, bool | str):
+            value = {"boolValue": item} if isinstance(item, bool) else {"stringValue": item}
+        elif isinstance(item, int):
+            value = {"intValue": str(item)}
+        elif isinstance(item, float):
+            value = {"doubleValue": item}
         else:
-            value = {"stringValue": json.dumps(v, default=str)}
-        out.append({"key": k, "value": value})
+            value = {"stringValue": json.dumps(item, default=str)}
+        out.append({"key": label, "value": value})
     return out
 
 
@@ -92,8 +92,8 @@ def otlp(trace: Trace, spans: list[Span[Any]]) -> dict:
     head = trace.export() or {}
     tid, root = ids(trace.trace_id, 32), ids(trace.trace_id, 16)
     meta = head.get("metadata") or {}
-    starts = [s.started_at for s in spans if s.started_at] or [None]
-    ends = [s.ended_at for s in spans if s.ended_at] or [None]
+    starts = [span.started_at for span in spans if span.started_at] or [None]
+    ends = [span.ended_at for span in spans if span.ended_at] or [None]
     rows = [
         {
             "traceId": tid,
@@ -112,18 +112,18 @@ def otlp(trace: Trace, spans: list[Span[Any]]) -> dict:
             ),
         }
     ]
-    for s in spans:
-        err = s.error
+    for span in spans:
+        err = span.error
         rows.append(
             {
                 "traceId": tid,
-                "spanId": ids(s.span_id, 16),
-                "parentSpanId": ids(s.parent_id, 16) if s.parent_id else root,
-                "name": name(s),
+                "spanId": ids(span.span_id, 16),
+                "parentSpanId": ids(span.parent_id, 16) if span.parent_id else root,
+                "name": name(span),
                 "kind": 1,
-                "startTimeUnixNano": nanos(s.started_at),
-                "endTimeUnixNano": nanos(s.ended_at),
-                "attributes": attrs(observation(s)),
+                "startTimeUnixNano": nanos(span.started_at),
+                "endTimeUnixNano": nanos(span.ended_at),
+                "attributes": attrs(observation(span)),
                 "status": {"code": 2, "message": err["message"]} if err else {"code": 1},
             }
         )
@@ -178,9 +178,9 @@ class Langfuse(TracingProcessor):
 
 def install() -> bool:
     """Send traces to Langfuse when its keys are set. The caller decides what happens otherwise."""
-    host, public, secret = (
-        os.environ.get(k) for k in ("LANGFUSE_HOST", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY")
-    )
+    host = os.environ.get("LANGFUSE_HOST")
+    public = os.environ.get("LANGFUSE_PUBLIC_KEY")
+    secret = os.environ.get("LANGFUSE_SECRET_KEY")
     if host and public and secret:
         set_trace_processors([Langfuse(poster(host, public, secret))])
         set_tracing_disabled(False)

@@ -13,6 +13,7 @@ import urllib.request
 import uuid
 from base64 import b64encode
 from dataclasses import replace
+from typing import NamedTuple
 
 import pytest
 from agents import set_trace_processors, set_tracing_disabled
@@ -20,9 +21,10 @@ from agents.testing import ScriptedModel, assistant_message, function_call
 from agents.tracing import generation_span, trace
 
 from workforce.access import Access, Badge, client_id
-from workforce.board import Board
+from workforce.board import Board, Card
 from workforce.issues import Issues
-from workforce.mission import SEED, ask_human, work
+from workforce.mission import SEED, NotAllowed, sign, work
+from workforce.people import Person
 from workforce.sources import Readers
 from workforce.traces import Langfuse, install
 
@@ -37,15 +39,20 @@ FACTS = {
 
 
 def fake(user: str) -> Access:
-    approvers = {"terminal:param": "param", "terminal:sam": "sam"}
-    return Access(lambda *fact: fact in FACTS, lambda agent: Badge(client_id(agent), user), user, approvers)
+    return Access(lambda *fact: fact in FACTS, lambda agent: Badge(client_id(agent), user), user)
+
+
+class Desk(NamedTuple):
+    board: Board
+    card: Card
+    issues: Issues
 
 
 @pytest.fixture
 def desk(tmp_path):
     board, issues = Board.open(tmp_path / "board.json"), Issues.open(tmp_path / "github.json")
-    board.cards.append(replace(SEED, id=f"C-{uuid.uuid4().hex[:8]}", runs=[], log=[]))
-    return board, board.cards[0], issues
+    board.cards.append(replace(SEED, card_id=f"C-{uuid.uuid4().hex[:8]}", runs=[], log=[]))
+    return Desk(board, board.cards[0], issues)
 
 
 def reply_run(emit_traces: bool = False) -> ScriptedModel:
@@ -62,10 +69,12 @@ def reply_run(emit_traces: bool = False) -> ScriptedModel:
 
 
 def test_an_employee_acting_for_someone_off_the_support_desk_is_refused(desk):
-    board, card, issues = desk
+    board = desk.board
+    card = desk.card
+    issues = desk.issues
     model = reply_run()
 
-    asyncio.run(work(board, card, issues, Readers("acme", "U_ENG"), model=model, access=fake("sam")))
+    asyncio.run(work(board, card, issues, Readers("kaas", "U_ENG"), model=model, access=fake("sam")))
 
     # The resolver may work support, but not for sam: the issue is refused, nothing queued, card not Done.
     assert "Refused: sam has no access to the support desk" in str(model.calls[2].input)
@@ -74,23 +83,23 @@ def test_an_employee_acting_for_someone_off_the_support_desk_is_refused(desk):
 
 
 def test_an_approver_openfga_refuses_leaves_the_reply_waiting(desk):
-    board, card, issues = desk
-    asyncio.run(work(board, card, issues, Readers("acme", "U_ENG"), model=reply_run(), access=fake("param")))
+    board = desk.board
+    card = desk.card
+    issues = desk.issues
+    asyncio.run(work(board, card, issues, Readers("kaas", "U_ENG"), model=reply_run(), access=fake("param")))
     assert card.column == "Needs you"
 
-    async def sam(card):
-        return "terminal:sam", True
-
-    asyncio.run(ask_human(board, card, issues, sam, fake("param")))
+    contractor = Person("Sam", "contractor", "sam")
+    with pytest.raises(NotAllowed):
+        sign(board, card, issues, contractor, True, fake("param"))
 
     assert issues.comments(412) == [] and card.column == "Needs you" and card.pending
-    assert "terminal:sam may not approve replies" in card.log[-1]
+    assert "Sam may not approve this" in card.log[-1]
 
-    async def renamed(card):
-        return "terminal:renamed", True
-
-    # An account renamed to param is still not param: only a mapped id counts.
-    asyncio.run(ask_human(board, card, issues, renamed, fake("param")))
+    # A role named support approver is not enough once OpenFGA answers: only its can_approve counts.
+    renamed = Person("Sam", "support approver", "sam")
+    with pytest.raises(NotAllowed):
+        sign(board, card, issues, renamed, True, fake("param"))
     assert issues.comments(412) == [] and card.column == "Needs you"
 
 
@@ -109,22 +118,24 @@ def spans(body):
 
 
 def attr(span, key):
-    return next((a["value"] for a in span["attributes"] if a["key"] == key), None)
+    return next((item["value"] for item in span["attributes"] if item["key"] == key), None)
 
 
 def test_every_run_on_a_card_is_one_langfuse_trace_in_the_card_session(desk, traced):
-    board, card, issues = desk
+    board = desk.board
+    card = desk.card
+    issues = desk.issues
 
-    asyncio.run(work(board, card, issues, Readers("acme", "U_ENG"), model=reply_run(emit_traces=True)))
+    asyncio.run(work(board, card, issues, Readers("kaas", "U_ENG"), model=reply_run(emit_traces=True)))
 
     [body] = traced
     root, *rest = spans(body)
-    assert attr(root, "langfuse.session.id") == {"stringValue": card.id}
-    assert len(root["traceId"]) == 32 and all(len(s["spanId"]) == 16 for s in spans(body))
+    assert attr(root, "langfuse.session.id") == {"stringValue": card.card_id}
+    assert len(root["traceId"]) == 32 and all(len(span["spanId"]) == 16 for span in spans(body))
     # Every span hangs off the run, and the tools and the handoff are there by name.
-    known = {s["spanId"] for s in spans(body)}
-    assert all(s["parentSpanId"] in known for s in rest)
-    kinds = {(s["name"], attr(s, "langfuse.observation.type")["stringValue"]) for s in rest}
+    known = {span["spanId"] for span in spans(body)}
+    assert all(span["parentSpanId"] in known for span in rest)
+    kinds = {(span["name"], attr(span, "langfuse.observation.type")["stringValue"]) for span in rest}
     assert {("read_issue", "tool"), ("request_reply", "tool"), ("Support resolver", "agent")} <= kinds
     assert sum(kind == "generation" for _, kind in kinds) >= 1
 
@@ -145,11 +156,15 @@ def test_a_langfuse_outage_never_fails_a_card(desk):
     def down(body):
         raise OSError("connection refused")
 
-    board, card, issues = desk
+    board = desk.board
+
+    card = desk.card
+
+    issues = desk.issues
     set_trace_processors([Langfuse(down)])
     set_tracing_disabled(False)
     try:
-        asyncio.run(work(board, card, issues, Readers("acme", "U_ENG"), model=reply_run(emit_traces=True)))
+        asyncio.run(work(board, card, issues, Readers("kaas", "U_ENG"), model=reply_run(emit_traces=True)))
     finally:
         set_tracing_disabled(True)
         set_trace_processors([])
@@ -170,46 +185,43 @@ def langfuse(path: str) -> dict:
 @pytest.mark.stack
 @pytest.mark.lab("deploy-agentic-ai-systems-for-engineers")
 def test_the_board_runs_behind_keycloak_openfga_and_langfuse(desk):
-    board, card, issues = desk
+    board = desk.board
+    card = desk.card
+    issues = desk.issues
     assert install(), "make stack-check sets LANGFUSE_HOST and its keys"
     try:
         sam, param = Access.from_env(user="sam"), Access.from_env(user="param")
         # Keycloak, not the prompt, says who holds each token and for whom.
         assert param.badge("Support resolver") == Badge("support-resolver", "param")
 
-        asyncio.run(work(board, card, issues, Readers("acme", "U_ENG"), model=reply_run(True), access=sam))
+        asyncio.run(work(board, card, issues, Readers("kaas", "U_ENG"), model=reply_run(True), access=sam))
         assert card.column == "Backlog" and any(
-            "sam has no access to the support desk" in x for x in card.log
+            "sam has no access to the support desk" in line for line in card.log
         )
 
-        asyncio.run(work(board, card, issues, Readers("acme", "U_ENG"), model=reply_run(True), access=param))
+        asyncio.run(work(board, card, issues, Readers("kaas", "U_ENG"), model=reply_run(True), access=param))
         assert card.column == "Needs you"
 
-        def tap(who):
-            async def approver(card):
-                return who, True
-
-            return approver
-
-        # sam is a support approver but not support staff; OpenFGA's can_approve needs both.
-        asyncio.run(ask_human(board, card, issues, tap("terminal:sam"), param))
+        # sam is not support staff; OpenFGA's can_approve needs the approver and the staff relation.
+        with pytest.raises(NotAllowed):
+            sign(board, card, issues, Person("Sam", "contractor", "sam"), True, param)
         assert issues.comments(412) == [] and card.column == "Needs you"
-        asyncio.run(ask_human(board, card, issues, tap("terminal:param"), param))
-        assert issues.replied(412, card.id)["approved_by"] == "terminal:param" and card.column == "Done"
+        sign(board, card, issues, Person("Param", "support approver", "param"), True, param)
+        assert issues.replied(412, card.card_id)["approved_by"] == "Param" and card.column == "Done"
     finally:
         set_tracing_disabled(True)
         set_trace_processors([])
 
     # Both runs on the card reach Langfuse as one session, sam's and param's, within seconds.
     for _ in range(60):
-        runs = langfuse(f"/api/public/v2/observations?sessionId={card.id}&limit=10")["data"]
+        runs = langfuse(f"/api/public/v2/observations?sessionId={card.card_id}&limit=10")["data"]
         if len(runs) == 2:
             break
         time.sleep(1)
-    assert sorted(r["userId"] for r in runs) == ["param", "sam"], runs
+    assert sorted(run["userId"] for run in runs) == ["param", "sam"], runs
     names = {
-        o["name"]
-        for r in runs
-        for o in langfuse(f"/api/public/v2/observations?traceId={r['traceId']}&limit=100")["data"]
+        observation["name"]
+        for run in runs
+        for observation in langfuse(f"/api/public/v2/observations?traceId={run['traceId']}&limit=100")["data"]
     }
     assert {"read_issue", "request_reply", "Support resolver"} <= names

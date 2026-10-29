@@ -1,10 +1,10 @@
 {
-  "realm": "acme",
+  "realm": "kaas",
   "enabled": true,
   "users": [
     {
       "username": "param",
-      "email": "param@acme.example",
+      "email": "param@kaas.example",
       "firstName": "Param",
       "lastName": "Support",
       "enabled": true,
@@ -19,7 +19,7 @@
     },
     {
       "username": "sam",
-      "email": "sam@acme.example",
+      "email": "sam@kaas.example",
       "firstName": "Sam",
       "lastName": "Contractor",
       "enabled": true,

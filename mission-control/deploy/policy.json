@@ -90,11 +90,6 @@
       "object": "desk:engineering"
     },
     {
-      "user": "user:sam",
-      "relation": "approver",
-      "object": "desk:support"
-    },
-    {
       "user": "agent:support-resolver",
       "relation": "employee",
       "object": "desk:support"
@@ -104,10 +99,5 @@
       "relation": "employee",
       "object": "desk:engineering"
     }
-  ],
-  "approvers": {
-    "terminal:param": "param",
-    "terminal:sam": "sam",
-    "board:param": "param"
-  }
+  ]
 }

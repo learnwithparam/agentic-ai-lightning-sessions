@@ -96,7 +96,7 @@ def fair_request(ctx: RunContextWrapper, agent: Agent, items: str | list) -> Gua
     if found:
         desk = ctx.context
         what = f"blocked: the request screens by {', '.join(found)}"
-        desk.ats.audit(desk.card.id, "fair request", "", what, found=tuple(found))
+        desk.ats.audit(desk.card.card_id, "fair request", "", what, found=tuple(found))
     return GuardrailFunctionOutput(found, tripwire_triggered=bool(found))
 
 
@@ -110,7 +110,7 @@ def hidden_text(data: ToolOutputGuardrailData) -> ToolGuardrailFunctionOutput:
     if not found:
         return ToolGuardrailFunctionOutput.allow()
     name = desk.ats.candidate(candidate_id)["name"]
-    desk.ats.flag(desk.card.id, candidate_id, found)
+    desk.ats.flag(desk.card.card_id, candidate_id, found)
     return ToolGuardrailFunctionOutput.reject_content(
         f"{name}'s CV is withheld for a recruiter: it holds text a person reading it cannot see. "
         f"Do not shortlist {name}; judge the others."

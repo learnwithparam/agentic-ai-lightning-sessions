@@ -1,4 +1,4 @@
-"""Acme's GitHub issues: the system of record a customer card is checked against.
+"""KaaS's GitHub issues: the system of record a customer card is checked against.
 
 A reply to a customer is a comment on their GitHub issue. The demo works on a copy of
 fixtures/<tenant>/github.json, so a run never edits the fixture; with GITHUB_REPO and GITHUB_TOKEN it
@@ -19,7 +19,7 @@ from pathlib import Path
 from workforce.board import read_json
 from workforce.sources import FIXTURES
 
-AUTHOR = "acme-support"
+AUTHOR = "kaas-support"
 
 
 def marker(card_id: str) -> str:
@@ -33,7 +33,7 @@ class Issues:
     token: str | None = None
 
     @classmethod
-    def open(cls, path: Path, tenant: str = "acme") -> Issues:
+    def open(cls, path: Path, tenant: str = "kaas") -> Issues:
         """The fixture copy at `path`; the real repository too when GITHUB_REPO and GITHUB_TOKEN are set."""
         if not path.exists():
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -55,14 +55,14 @@ class Issues:
 
     def issue(self, number: int) -> dict:
         if self.repo:
-            i = self._api(f"/issues/{number}")
+            item = self._api(f"/issues/{number}")
             return {
                 "number": number,
-                "title": i["title"],
-                "state": i["state"],
-                "author": i["user"]["login"],
-                "body": i.get("body") or "",
-                "url": i["html_url"],
+                "title": item["title"],
+                "state": item["state"],
+                "author": item["user"]["login"],
+                "body": item.get("body") or "",
+                "url": item["html_url"],
                 "comments": self.comments(number),
             }
         for row in self._rows():
@@ -73,32 +73,39 @@ class Issues:
     def comments(self, number: int) -> list[dict]:
         if self.repo:
             rows = self._api(f"/issues/{number}/comments?per_page=100")
-            return [{"author": c["user"]["login"], "body": c["body"], "url": c["html_url"]} for c in rows]
+            return [
+                {"author": row["user"]["login"], "body": row["body"], "url": row["html_url"]} for row in rows
+            ]
         return self.issue(number)["comments"]
 
-    def me(self) -> str:
+    def login(self) -> str:
         """Who the board posts as: the token's own login, or the fixture's support account."""
         if not self.repo:
             return AUTHOR
-        if not hasattr(self, "_me"):
-            self._me = self._api("", root="/user")["login"]
-        return self._me
+        if not hasattr(self, "_login"):
+            self._login = self._api("", root="/user")["login"]
+        return self._login
 
     def replied(self, number: int, card_id: str) -> dict | None:
         """The comment this card posted, as GitHub has it, or None. Only this closes a reply card."""
         # Anyone can paste the marker into a comment; only one written as the board counts.
-        mine = (c for c in self.comments(number) if c["author"] == self.me())
-        return next((c for c in mine if marker(card_id) in c["body"]), None)
+        mine = (found for found in self.comments(number) if found["author"] == self.login())
+        return next((found for found in mine if marker(card_id) in found["body"]), None)
 
     def reply(self, number: int, text: str, card_id: str, approved_by: str) -> dict:
-        if found := self.replied(number, card_id):
+        found = self.replied(number, card_id)
+        if found:
             return found
         body = f"{text}\n\n{marker(card_id)}"
         if self.repo:
-            c = self._api(f"/issues/{number}/comments", {"body": body})
-            return {"author": c["user"]["login"], "body": c["body"], "url": c["html_url"]}
+            posted = self._api(f"/issues/{number}/comments", {"body": body})
+            return {
+                "author": posted["user"]["login"],
+                "body": posted["body"],
+                "url": posted["html_url"],
+            }
         rows = self._rows()
-        row = next(r for r in rows if r["number"] == number)
+        row = next(candidate for candidate in rows if candidate["number"] == number)
         url = f"{row['url']}#{card_id}"
         comment = {"author": AUTHOR, "body": body, "url": url, "approved_by": approved_by}
         row["comments"].append(comment)

@@ -88,7 +88,7 @@ def brief(ats: ATS, card: Card) -> str:
     names = (f"- {item}: {ats.candidate(item)['name']}" for item in role["applicants"])
     applied = "\n".join(names) or "- nobody yet"
     return (
-        f"Card {card.id}: {card.title}\nHiring manager: {card.customer}\n"
+        f"Card {card.card_id}: {card.title}\nHiring manager: {card.customer}\n"
         f"Role {card.issue}: {role['title']}, {role['location']}. Shortlist {role['shortlist']}.\n"
         f"Must have:\n{must}\nApplicants:\n{applied}"
     )
@@ -125,7 +125,7 @@ read_cv_unguarded = function_tool(cv_text, name_override="read_cv", is_enabled=u
 def read_field(ctx: ToolContext[Desk], candidate_id: str, field: str) -> str:
     """Read one field of an applicant's record in the hiring system."""
     try:
-        return ctx.context.ats.field(ctx.context.card.id, candidate_id, field, SCREENER)
+        return ctx.context.ats.field(ctx.context.card.card_id, candidate_id, field, SCREENER)
     except Refused as refusal:
         return f"Refused: {refusal}"
 
@@ -135,7 +135,7 @@ def submit_shortlist(ctx: ToolContext[Desk], candidate_ids: list[str]) -> str:
     """Submit the shortlist to the hiring manager, best first."""
     desk = ctx.context
     try:
-        shortlist = desk.ats.submit(desk.card.id, desk.card.issue, candidate_ids, SCREENER)
+        shortlist = desk.ats.submit(desk.card.card_id, desk.card.issue, candidate_ids, SCREENER)
     except Refused as refusal:
         return f"Refused: {refusal}"
     return f"Shortlist sent to {shortlist['manager']}."
@@ -146,7 +146,7 @@ def stop_once_the_shortlist_is_in(
 ) -> ToolsToFinalOutputResult:
     # The hiring system ends the run, not the agent's words; a refused shortlist sends it back to work.
     desk = ctx.context
-    held = desk.ats.shortlist(desk.card.id) is not None
+    held = desk.ats.shortlist(desk.card.card_id) is not None
     return ToolsToFinalOutputResult(is_final_output=held, final_output="shortlist sent" if held else None)
 
 
@@ -171,8 +171,8 @@ def screener(model: Model | str, guarded: bool = True) -> Agent[Desk]:
 
 
 def settle(board: Board, card: Card, ats: ATS) -> None:
-    shortlist, flags = ats.shortlist(card.id), ats.flags(card.id)
-    blocks = [row for row in ats.log(card.id) if row["check"] == "fair request"]
+    shortlist, flags = ats.shortlist(card.card_id), ats.flags(card.card_id)
+    blocks = [row for row in ats.log(card.card_id) if row["check"] == "fair request"]
     waiting = [ats.candidate(item)["name"] for item, flag in flags.items() if not flag["reviewed_by"]]
     if blocks:
         found = ", ".join(blocks[-1]["found"])
@@ -221,7 +221,7 @@ async def work(
         # The guardrail ran before the model, so this run spent nothing.
         outcome = Outcome(Usage(), True, "request blocked before the model was called")
         if live:
-            blocked = f"{SCREENER:<10}{'fair request':<18}{ats.log(card.id)[-1]['what']}"
+            blocked = f"{SCREENER:<10}{'fair request':<18}{ats.log(card.card_id)[-1]['what']}"
             print(paint(blocked[:70], RED), flush=True)
     except AgentsException as failure:
         data = failure.run_data
@@ -229,7 +229,7 @@ async def work(
     except APIError as failure:
         outcome = Outcome(steps.usage, False, f"run failed: {type(failure).__name__}")
     usage = outcome.usage
-    blocks = [f"{row['check']}: {row['what']}" for row in ats.log(card.id)]
+    blocks = [f"{row['check']}: {row['what']}" for row in ats.log(card.card_id)]
     card.runs.append(
         Run(
             SCREENER,
@@ -241,7 +241,7 @@ async def work(
             steps.seen + blocks,
         )
     )
-    card.log.extend(f"Gate: {gate_line(ats, row)}" for row in ats.log(card.id))
+    card.log.extend(f"Gate: {gate_line(ats, row)}" for row in ats.log(card.card_id))
     settle(board, card, ats)
     return card
 
@@ -266,12 +266,12 @@ def report(card: Card, live: bool = False) -> None:
             print(paint(line, RED) if ": " in line and not line.startswith(SCREENER) else line)
     print(f"{run.input_tokens + run.output_tokens:,} tokens, ${run.cost:.4f}")
     tone = GREEN if card.column == Column.DONE else YELLOW
-    print(paint(f"{card.id} {card.column}: {card.log[-1].split(': ', 1)[-1]}", tone))
+    print(paint(f"{card.card_id} {card.column}: {card.log[-1].split(': ', 1)[-1]}", tone))
 
 
 def show_naive_shortlist(state: Path, card: Card) -> None:
     ats = ATS(state)
-    shortlist = ats.shortlist(card.id)
+    shortlist = ats.shortlist(card.card_id)
     names = [ats.candidate(item)["name"] for item in shortlist["candidates"]] if shortlist else []
     print("Shortlist:", ", ".join(names) or "none")
     if names[:1] == ["Jordan Lee"]:
