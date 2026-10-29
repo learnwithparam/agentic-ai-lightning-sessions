@@ -10,13 +10,15 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-from brain.vault import BRAIN, Vault
+from brain.vault import BRAIN, FIXTURES, Vault
 from workforce.mission import paint
 
+FILED = FIXTURES / "brain" / "filed"
 MODEL = "claude-haiku-5-5"
 TOOLS = "Read,Write,Edit,Glob"
 PROMPT = "File every file in inbox/ into the brain, following CLAUDE.md. Then update index.md."
@@ -46,8 +48,13 @@ def step(event: dict, root: Path) -> str | None:
             continue
         args = part.get("input", {})
         where = str(args.get("file_path") or args.get("pattern") or "")
-        lines.append(f"{part['name']:<6} {where.removeprefix(str(root) + '/')}")
+        lines.append(f"{part['name']:<6} {relative_to(where, root)}")
     return "\n".join(lines) or None
+
+
+def relative_to(where: str, root: Path) -> str:
+    prefix = f"{root}/"
+    return where[len(prefix) :] if where.startswith(prefix) else where
 
 
 def other_models(result: dict) -> list[str]:
@@ -66,22 +73,41 @@ def file(root: Path = BRAIN) -> int:
             event = json.loads(line)
             if event.get("type") == "result":
                 result = event
-            elif said := step(event, root):
-                print(said)
+            else:
+                said = step(event, root)
+                if said:
+                    print(said)
     if not result or result.get("is_error"):
         print(paint("Claude Code did not finish the filing", "1;31"))
         return 1
-    if extra := other_models(result):
+    extra = other_models(result)
+    if extra:
         print(paint(f"Claude Code used a model it was not pinned to: {', '.join(extra)}", "1;31"))
         return 1
-    if problems := vault.check():
-        for p in problems:
-            print(paint(p, "1;31"))
+    return report(vault)
+
+
+def report(vault: Vault) -> int:
+    """The vault's verdict, worded the same whether Claude Code or the committed notes filed the brain."""
+    problems = vault.check()
+    if problems:
+        for problem in problems:
+            print(paint(problem, "1;31"))
         return 1
-    facts = sum(len(vault.note(n).facts) for n in vault.names())
+    facts = sum(len(vault.note(name).facts) for name in vault.names())
     print(paint(f"{len(vault.names())} notes, {facts} facts, every one found in its source", "1;32"))
     return 0
 
 
+def file_offline(root: Path = BRAIN) -> int:
+    """The notes from the last real filing, for a day when Claude Code or the network is down."""
+    vault = Vault.seed(root)
+    print(paint(f"Filing {len(vault.inbox())} files from the inbox, offline", "1;36"))
+    for note in sorted(FILED.glob("*.md")):
+        shutil.copy(note, root / "notes" / note.name)
+        print(f"Write  notes/{note.name}")
+    return report(vault)
+
+
 if __name__ == "__main__":
-    sys.exit(file())
+    sys.exit(file_offline() if "--offline" in sys.argv else file())

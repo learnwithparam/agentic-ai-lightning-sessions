@@ -59,7 +59,7 @@
         ],
         "run": "for d in evals-from-traces governance guardrails mission-control multi-agent-mcp second-brain token-economics trace-in-production; do make -C $d check || exit 1; done",
         "each": "^(evals-from-traces|governance|guardrails|mission-control|multi-agent-mcp|second-brain|token-economics|trace-in-production)/",
-        "scoped": "for d in {items}; do make -C $d check || exit 1; done",
+        "scoped": "for d in $(echo {items} | tr , \" \"); do make -C $d check || exit 1; done",
         "alone": true,
         "covers": [
           "make check",

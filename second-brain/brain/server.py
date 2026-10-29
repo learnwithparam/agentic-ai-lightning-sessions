@@ -19,80 +19,91 @@ from brain.vault import Refused, Vault
 TOOLS = ("search_notes", "read_note", "cite")
 # A small model that finds nothing searches again and again; the brain stops it here, not in a prompt.
 SEARCHES = 3
+RESEARCHER = "Researcher"
 
 
 class BrainServer(MCPServer):
     def __init__(self, root: Path, state: Path, card: str) -> None:
         super().__init__(name="brain", instructions="Hannah Moreau's brain of client notes")
-        self.vault, self.card, self.calls = Vault(root), card, state / "calls.jsonl"
+        self.vault = Vault(root)
+        self.card = card
+        self.calls = state / "calls.jsonl"
         tools(self)
 
-    def log(self, tool: str, args: dict, allowed: bool, said: str) -> str:
-        row = {"at": time.time(), "card": self.card, "tool": tool}
-        row |= {"args": {k: str(v)[:160] for k, v in args.items()}, "allowed": allowed, "said": said[:200]}
-        self.calls.parent.mkdir(parents=True, exist_ok=True)
-        with self.calls.open("a") as f:
-            f.write(json.dumps(row) + "\n")
-        return said
+    def log(self, tool: str, args: dict, allowed: bool, said: str, caller: str = RESEARCHER) -> str:
+        return log_call(self.calls.parent, self.card, tool, args, allowed, said, caller)
+
+
+def log_call(state: Path, card: str, tool: str, args: dict, allowed: bool, said: str, caller: str) -> str:
+    """One row in the card's call log, whoever made the call: the researcher or a person on the board."""
+    row = {"at": time.time(), "card": card, "tool": tool, "by": caller}
+    row |= {"args": {key: str(value)[:160] for key, value in args.items()}, "allowed": allowed}
+    row["said"] = said[:200]
+    log_file = state / "calls.jsonl"
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    with log_file.open("a") as handle:
+        handle.write(json.dumps(row) + "\n")
+    return said
 
 
 def calls(state: Path, card: str | None = None) -> list[dict]:
-    f = state / "calls.jsonl"
-    rows = [json.loads(line) for line in f.read_text().splitlines()] if f.exists() else []
-    return [r for r in rows if card is None or r["card"] == card]
+    log_file = state / "calls.jsonl"
+    rows = [json.loads(line) for line in log_file.read_text().splitlines()] if log_file.exists() else []
+    return [{"by": RESEARCHER, **row} for row in rows if card is None or row["card"] == card]
 
 
 def citations(state: Path, card: str) -> list[dict]:
     """The citations the brain accepted on one card, each once, in the order they were made."""
     seen: dict[tuple[str, str], dict] = {}
-    for c in calls(state, card):
-        if c["tool"] == "cite" and c["allowed"]:
-            seen.setdefault((c["args"]["note"], c["args"]["quote"]), c["args"])
+    for call in calls(state, card):
+        if call["tool"] == "cite" and call["allowed"]:
+            seen.setdefault((call["args"]["note"], call["args"]["quote"]), call["args"])
     return list(seen.values())
 
 
-def tools(s: BrainServer) -> None:
-    @s.tool()
+def tools(server: BrainServer) -> None:
+    @server.tool()
     def search_notes(query: str) -> str:
         """Find the notes that match a few keywords. Returns each note's name, title and quoted facts."""
-        done = sum(c["tool"] == "search_notes" for c in calls(s.calls.parent, s.card))
+        done = sum(call["tool"] == "search_notes" for call in calls(server.calls.parent, server.card))
         if done >= SEARCHES:
             said = f"Refused: {SEARCHES} searches is the limit. Cite what you found or say it is not held."
-            return s.log("search_notes", {"query": query}, False, said)
-        hits = s.vault.search(query)
+            return server.log("search_notes", {"query": query}, False, said)
+        hits = server.vault.search(query)
         said = (
             "\n\n".join(
-                f"{n.name}: {n.title} ({n.date})\n" + "\n".join(f'- "{f}"' for f in n.facts) for n, _ in hits
+                f"{note.name}: {note.title} ({note.date})\n" + "\n".join(f'- "{fact}"' for fact in note.facts)
+                for note, _ in hits
             )
             or "No note matches."
         )
         if done:
             said += "\n\nYou have searched already. Cite the facts that answer, or say the brain lacks it."
-        return s.log("search_notes", {"query": query}, True, said)
+        return server.log("search_notes", {"query": query}, True, said)
 
-    @s.tool()
+    @server.tool()
     def read_note(name: str) -> str:
         """Read one note by the name search_notes gave, with its source, date and quoted facts."""
         try:
-            return s.log("read_note", {"name": name}, True, s.vault.raw(name))
-        except Refused as e:
-            return s.log("read_note", {"name": name}, False, f"Refused: {e}")
+            return server.log("read_note", {"name": name}, True, server.vault.raw(name))
+        except Refused as refusal:
+            return server.log("read_note", {"name": name}, False, f"Refused: {refusal}")
 
-    @s.tool()
+    @server.tool()
     def cite(note: str, quote: str) -> str:
         """Rest the answer on one fact: the note's name and the fact, copied exactly from the note."""
         args = {"note": note, "quote": quote}
         try:
-            n = s.vault.cite(note, quote)
-            return s.log("cite", args, True, f"Cited {note}, from {n.source}")
-        except Refused as e:
-            return s.log("cite", args, False, f"Refused: {e}")
+            cited = server.vault.cite(note, quote)
+            return server.log("cite", args, True, f"Cited {note}, from {cited.source}")
+        except Refused as refusal:
+            return server.log("cite", args, False, f"Refused: {refusal}")
 
 
 if __name__ == "__main__":
-    p = argparse.ArgumentParser()
-    p.add_argument("--brain", type=Path, required=True)
-    p.add_argument("--state", type=Path, required=True)
-    p.add_argument("--card", required=True)
-    a = p.parse_args()
-    BrainServer(a.brain, a.state, a.card).run("stdio")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--brain", type=Path, required=True)
+    parser.add_argument("--state", type=Path, required=True)
+    parser.add_argument("--card", required=True)
+    args = parser.parse_args()
+    BrainServer(args.brain, args.state, args.card).run("stdio")

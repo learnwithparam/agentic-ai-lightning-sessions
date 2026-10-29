@@ -1,0 +1,4 @@
+[
+  {"name": "Hannah Moreau", "role": "consultant", "passphrase_env": "BOARD_PASSPHRASE_HANNAH_MOREAU"},
+  {"name": "Ravi Shah", "role": "associate", "passphrase_env": "BOARD_PASSPHRASE_RAVI_SHAH"}
+]

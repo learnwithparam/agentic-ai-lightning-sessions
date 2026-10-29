@@ -1,21 +1,28 @@
 # Build a Second Brain with Claude Code
 
-Hannah Moreau is an independent retail consultant, and her client is Fernwood Grocers, 42 stores across
+Hannah Moreau is a KaaS Consulting consultant, and her client is a grocery chain with 42 stores across
 the West Midlands. Everything she captures lands in one inbox: meeting notes, a voice memo of a call
 with the CFO, and the client's Q3 store review as a PDF. Claude Code files the inbox into her brain,
-one note per file, with every fact quoted word for word from its source. Then a researcher on Acme's
+one note per file, with every fact quoted word for word from its source. Then a researcher on KaaS Consulting's
 board answers her client's questions from the brain, over MCP, and cites each fact it uses.
 
 **Before:** the same model with no brain says it has no access to Hannah's client work, and asks what
 the project is. **After:** the pilot question and the payback question are Done, each answer resting on
 a quote the brain checked, and the 2027 IT budget question waits for Hannah, because no note holds it.
 
+Only Hannah answers for the client. Ravi Shah, an associate, signs in on the board, tries to answer the
+IT budget card, and the brain refuses him and logs it. Hannah signs in, answers with her source, and
+the brain files her answer as a note that the check still passes.
+
 ```
 make check     # lint and the acceptance tests: real vault and MCP server, a scripted model, no keys
 make file      # Claude Code files the inbox into a fresh brain, on your own Claude Code login
+make file-offline  # the notes from the last real filing, checked by the vault (no Claude Code, no network)
 make demo      # the researcher answers the board's three questions (key from ../mission-control/.env)
 make naive     # the same model, the same questions, no brain
-make board     # the board from the last make demo on http://127.0.0.1:8093
+make board     # the board from the last make demo on http://127.0.0.1:8093, signed in
+make rehearse  # signs in as Ravi and Hannah on the real board and walks the IT budget card
+make record CLIP=brain  # records the board clip for the deck
 ```
 
 ## Three checks, in the code
@@ -33,7 +40,7 @@ model wrote. The answer's own wording is the model's; the board shows each cited
 
 `answerer.settle` reads the brain server's call log, never the answer. A card with at least one accepted
 citation is Done, answered from the notes it cites. A card whose citations were all refused, or that
-cited nothing, goes to Needs you for Hannah. The card page shows the answer, each citation linked to its
+cited nothing, goes to Needs you for Hannah. Her answer, filed by `Vault.file_answer`, closes it. The card page shows the answer, each citation linked to its
 note, and every call the researcher made to the brain, refusals included. A note page marks the fact
 that was cited.
 

@@ -1354,6 +1354,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "aiohttp" },
+    { name = "mcp" },
     { name = "openai-agents" },
     { name = "pypdf" },
 ]
@@ -1367,6 +1368,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = "==3.14.4" },
+    { name = "mcp", specifier = "==2.3.0" },
     { name = "openai-agents", specifier = "==0.23.1" },
     { name = "pypdf", specifier = "==6.21.2" },
 ]

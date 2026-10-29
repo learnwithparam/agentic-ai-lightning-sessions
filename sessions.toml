@@ -61,9 +61,10 @@ slug = "build-an-ai-second-brain-with-claude-code"
 title = "Build a Second Brain with Claude Code"
 folder = "second-brain"
 built = true
+readable = true
 job = "Claude Code files a consultant's meeting notes, papers and client decks into one brain an agent reads over MCP"
 truth = "Every answer cites a brain note whose file exists"
-screen = "The brain's notes in the editor, then a board card answered from one of them"
+screen = "Claude Code files the inbox, the researcher answers from quoted notes, and Hannah answers what no note holds"
 sells = "The Deploy workshop on 16 Dec"
 
 [[session]]

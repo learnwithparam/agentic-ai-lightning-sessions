@@ -15,21 +15,21 @@ import re
 import shutil
 import sys
 from dataclasses import replace
+from datetime import date
 from pathlib import Path
 
 from agents import Agent, AgentsException, Model, ModelSettings, Runner, Usage
 from agents.mcp import MCPServerStdio
 from openai import APIError
 
-from brain.server import TOOLS, calls, citations
-from brain.vault import BRAIN, Vault
+from brain.server import RESEARCHER, TOOLS, calls, citations, log_call
+from brain.vault import BRAIN, Refused, Vault, flat
 from workforce import default_model
 from workforce.board import Board, Card, Role, Run, price
 from workforce.mission import Steps, paint
 
 ROOT = Path(__file__).resolve().parent.parent
 STATE = ROOT / ".board"
-RESEARCHER = "Researcher"
 OWNER = "Hannah Moreau"
 TEAM = (
     Role(
@@ -50,10 +50,11 @@ SEED = (
     Card(
         "C-2", "What payback does Marcus need before the rollout goes to the board?", "Leila Haddad", "Pilot"
     ),
-    Card("C-3", "What is Fernwood's IT budget for 2027?", "Marcus Bell", "Budget"),
+    Card("C-3", "What is the chain's IT budget for 2027?", "Marcus Bell", "Budget"),
 )
 INSTRUCTIONS = (
-    f"You answer questions on {OWNER}'s client work for Fernwood Grocers from her brain, and from nothing "
+    f"You answer questions on {OWNER}'s client work for a 42-store grocery chain from her brain, and from "
+    "nothing "
     "else. Search the brain once with search_notes. Cite every fact your answer uses with cite, copying the "
     "fact exactly as the note quotes it. Then answer in two or three plain sentences that say only what the "
     "cited facts say, with no reason, consequence or number they do not state. If no fact answers the "
@@ -94,15 +95,56 @@ def tidy(text: str) -> str:
 
 def settle(board: Board, card: Card, state: Path) -> None:
     cited = citations(state, card.id)
-    refused = [c for c in calls(state, card.id) if c["tool"] == "cite" and not c["allowed"]]
-    if cited:
-        notes = list(dict.fromkeys(c["note"] for c in cited))
+    refused = [call for call in calls(state, card.id) if call["tool"] == "cite" and not call["allowed"]]
+    by_owner = [call for call in calls(state, card.id) if call["tool"] == "cite" and call["by"] == OWNER]
+    if by_owner and by_owner[-1]["allowed"]:
+        note = by_owner[-1]["args"]["note"]
+        card.sources = [note]
+        board.move(card, "Done", f"{OWNER} answered, filed as {note}")
+    elif cited:
+        notes = list(dict.fromkeys(cite["note"] for cite in cited))
         card.sources = notes
         board.move(card, "Done", f"answered from {len(notes)} {'note' if len(notes) == 1 else 'notes'}")
     elif refused:
         board.move(card, "Needs you", f"the brain refused {len(refused)} citations; {OWNER} answers")
     else:
         board.move(card, "Needs you", f"no note in the brain answers it; {OWNER} answers")
+
+
+def answer_for_client(
+    state: Path, card_id: str, answer: str, source: str, person: str, brain: Path = BRAIN, on_date: str = ""
+) -> Card:
+    """The person's answer for a card the brain could not answer; only the owner's is filed."""
+    board = Board.open(state / "board.json")
+    card = board.card(card_id)
+    args = {"answer": answer, "source": source}
+    try:
+        note = Vault(brain).file_answer(
+            card.id,
+            card.title,
+            card.customer,
+            answer,
+            source,
+            person,
+            OWNER,
+            on_date or date.today().isoformat(),
+        )
+    except Refused as refusal:
+        log_call(state, card.id, "answer_for_client", args, False, f"Refused: {refusal}", person)
+        raise
+    log_call(state, card.id, "answer_for_client", args, True, f"Filed {note.name}", person)
+    log_call(
+        state,
+        card.id,
+        "cite",
+        {"note": note.name, "quote": note.facts[0]},
+        True,
+        f"Cited {note.name}",
+        person,
+    )
+    card.answer = flat(answer)
+    settle(board, card, state)
+    return card
 
 
 async def work(board: Board, card: Card, model: Model | str | None = None, brain: Path = BRAIN) -> Card:
@@ -116,21 +158,26 @@ async def work(board: Board, card: Card, model: Model | str | None = None, brain
             result = await Runner.run(
                 researcher(mcp, model), f"{card.customer} asks: {card.title}", max_turns=12, hooks=steps
             )
-            usage, ok, said = result.context_wrapper.usage, True, str(result.final_output)
-        except AgentsException as e:
-            run = e.run_data
-            usage, ok, said = (run.context_wrapper.usage if run else Usage()), False, f"run failed: {e}"
-        except APIError as e:
-            usage, ok, said = steps.usage, False, f"run failed: {type(e).__name__}"
-    card.answer = tidy(said) if ok else ""
-    lines = [f"{c['tool']} {', '.join(c['args'].values())[:70]}" for c in calls(state, card.id)]
-    refused = [
-        f"Brain refused: {c['said'].removeprefix('Refused: ')}"
-        for c in calls(state, card.id)
-        if not c["allowed"]
+            usage = result.context_wrapper.usage
+            succeeded = True
+            said = str(result.final_output)
+        except AgentsException as failure:
+            run = failure.run_data
+            usage = run.context_wrapper.usage if run else Usage()
+            succeeded = False
+            said = f"run failed: {failure}"
+        except APIError as failure:
+            usage = steps.usage
+            succeeded = False
+            said = f"run failed: {type(failure).__name__}"
+    card.answer = tidy(said) if succeeded else ""
+    lines = [f"{call['tool']} {', '.join(call['args'].values())[:70]}" for call in calls(state, card.id)]
+    refusals = [
+        call["said"].replace("Refused: ", "", 1) for call in calls(state, card.id) if not call["allowed"]
     ]
-    card.runs.append(Run(RESEARCHER, usage.input_tokens, usage.output_tokens, price(usage), ok, said, lines))
-    card.log.extend(f"Gate: {r.removeprefix('Brain refused: ')}" for r in refused)
+    run = Run(RESEARCHER, usage.input_tokens, usage.output_tokens, price(usage), succeeded, said, lines)
+    card.runs.append(run)
+    card.log.extend(f"Gate: {refusal}" for refusal in refusals)
     settle(board, card, state)
     return card
 
@@ -138,10 +185,10 @@ async def work(board: Board, card: Card, model: Model | str | None = None, brain
 def report(board: Board, card: Card) -> None:
     """One question as the room reads it off a projector: each brain call, the answer, where it landed."""
     print(paint(f"{card.customer} asks: {card.title}", "1"))
-    for c in calls(board.path.parent, card.id):
-        args = ", ".join(c["args"].values())
-        line = f"  {c['tool']}({args[:64]}{'...' if len(args) > 64 else ''})"
-        print(line if c["allowed"] else paint(line + "  refused", "1;31"))
+    for call in calls(board.path.parent, card.id):
+        args = ", ".join(call["args"].values())
+        line = f"  {call['tool']}({args[:64]}{'...' if len(args) > 64 else ''})"
+        print(line if call["allowed"] else paint(line + "  refused", "1;31"))
     if card.column == "Done":
         print("  " + card.answer.strip().replace("\n", "\n  "))
     tone = "1;32" if card.column == "Done" else "1;33"
@@ -159,7 +206,7 @@ async def naive(model: Model | str) -> None:
 
 async def demo(model: Model | str) -> None:
     shutil.rmtree(STATE, ignore_errors=True)
-    board = Board(STATE / "board.json", [replace(c, runs=[], log=[]) for c in SEED])
+    board = Board(STATE / "board.json", [replace(seed, runs=[], log=[]) for seed in SEED])
     board.save()
     for card in board.cards:
         await work(board, card, model)
@@ -167,20 +214,21 @@ async def demo(model: Model | str) -> None:
 
 
 def main() -> None:
-    p = argparse.ArgumentParser()
-    p.add_argument("--naive", action="store_true", help="ask the questions with no brain")
-    p.add_argument("--serve", action="store_true", help="serve the board from the last run")
-    p.add_argument("--port", type=int, default=8093)
-    a = p.parse_args()
-    if a.serve:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--naive", action="store_true", help="ask the questions with no brain")
+    parser.add_argument("--serve", action="store_true", help="serve the board from the last run")
+    parser.add_argument("--port", type=int, default=8093)
+    args = parser.parse_args()
+    if args.serve:
         from brain.board import serve
 
-        serve(STATE, TEAM, a.port)
+        serve(STATE, TEAM, args.port)
         return
-    if a.naive:
+    if args.naive:
         asyncio.run(naive(default_model()))
         return
-    if problems := Vault(BRAIN).check() if (BRAIN / "notes").is_dir() else ["no brain yet"]:
+    problems = Vault(BRAIN).check() if (BRAIN / "notes").is_dir() else ["no brain yet"]
+    if problems:
         sys.exit("The brain is not ready; run make file first.\n" + "\n".join(problems))
     asyncio.run(demo(default_model()))
 

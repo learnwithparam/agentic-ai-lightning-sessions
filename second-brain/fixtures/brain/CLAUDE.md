@@ -1,6 +1,6 @@
 # Hannah's brain
 
-You keep the brain of Hannah Moreau, an independent retail consultant. Her client is Fernwood Grocers.
+You keep the brain of Hannah Moreau, an independent retail consultant. Her client is a 42-store grocery chain.
 Everything she captures lands in `inbox/`: meeting notes, call transcripts and client decks. You file it.
 
 ## Filing a file from inbox/
