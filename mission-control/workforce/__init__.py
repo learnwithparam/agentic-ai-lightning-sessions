@@ -9,13 +9,13 @@ from openai import AsyncOpenAI
 def default_model() -> Model | str:
     """WORKFORCE_MODEL, through OpenRouter when OPENROUTER_API_KEY is set, else through OpenAI.
 
-    OpenRouter ids such as nvidia/nemotron-3.5-lightning look like an SDK provider prefix, so the model
+    OpenRouter ids such as openai/gpt-6-luna look like an SDK provider prefix, so the model
     is built here instead of passed as a string. The SDK's tracing would post the key to OpenAI, so it
     goes to Langfuse when LANGFUSE_HOST is set, and is off otherwise.
     """
     from workforce.traces import install
 
-    name = os.environ.get("WORKFORCE_MODEL", "nvidia/nemotron-3.5-lightning")
+    name = os.environ.get("WORKFORCE_MODEL", "openai/gpt-6-luna")
     key = os.environ.get("OPENROUTER_API_KEY")
     langfuse = install()
     if not key:

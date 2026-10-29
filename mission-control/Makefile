@@ -5,6 +5,10 @@ SHELL := /bin/bash
 
 DECK := ../../../internal-apps/lwp-deck
 
+# The default small model stalls on the support card (C-1) for 90 s, so the board pins one that hands
+# the card over. A caller or the env file can still override it.
+export WORKFORCE_MODEL ?= openai/gpt-6-luna
+
 # The stack's addresses and its local keys from compose.yaml; nothing here is a real secret.
 STACK_ENV := KEYCLOAK_URL=http://127.0.0.1:8180 OPENFGA_URL=http://127.0.0.1:8185 \
 	LANGFUSE_HOST=http://127.0.0.1:8270 LANGFUSE_PUBLIC_KEY=pk-lf-kaas-local LANGFUSE_SECRET_KEY=sk-lf-kaas-local
