@@ -4,7 +4,7 @@ SHELL := /bin/bash
 # its .env, so the model and Langfuse keys live in one place. The desk, the candidate and the judge each
 # name their model in evals/; the recipes are silent, so a recording shows the evals, never a model name.
 # Langfuse's local keys from mission-control's compose.yaml, the same as its STACK_ENV; not real secrets.
-LANGFUSE := LANGFUSE_HOST=http://127.0.0.1:8270 LANGFUSE_PUBLIC_KEY=pk-lf-kaas-local LANGFUSE_SECRET_KEY=sk-lf-kaas-local
+LANGFUSE := LANGFUSE_HOST=http://127.0.0.1:8270 LANGFUSE_PUBLIC_KEY=pk-lf-acme-local LANGFUSE_SECRET_KEY=sk-lf-acme-local
 RUN := $(LANGFUSE) PYTHONPATH=../mission-control uv run --quiet
 KEYS := --env-file ../mission-control/.env
 
