@@ -1,0 +1,4 @@
+[
+  {"name": "Ingrid Halvorsen", "role": "maintenance lead", "passphrase_env": "BOARD_PASSPHRASE_INGRID_HALVORSEN"},
+  {"name": "Erik Lund", "role": "plant manager", "passphrase_env": "BOARD_PASSPHRASE_ERIK_LUND"}
+]

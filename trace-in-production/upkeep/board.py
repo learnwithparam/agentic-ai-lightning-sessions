@@ -1,12 +1,13 @@
-"""Mission Control's board, with what production adds: each employee's spend against the shift's budget.
+"""Mission Control's board, signed in, with what production adds: each employee's spend against the budget.
 
-Above the lanes, what each AI employee spent, killed runs included, and the budget alert if it went. A
-card in Done shows the repair order the maintenance system holds, and every card links to its runs in
-Langfuse, the card id being the session.
+Above the lanes, what each AI employee spent, killed runs included, and whether the shift is paused for the
+maintenance lead. The pause card holds the one form that continues it. A Done card shows the repair order
+the maintenance system holds, and every card links to its runs in Langfuse, the card id being the session.
 """
 
 from __future__ import annotations
 
+import asyncio
 import os
 from pathlib import Path
 
@@ -14,10 +15,15 @@ from aiohttp import web
 
 from upkeep import budget
 from upkeep.crew import PLANNER, TRIAGE
-from upkeep.plant import MACHINES, PROCEDURES, Cmms
-from workforce.board import WEB, Board, Card, E, Role, detail, render, team, usd
+from upkeep.ledger import langfuse
+from upkeep.plant import MACHINES, PROCEDURES, Cmms, Refused
+from upkeep.run import PAUSE_CARD, PAUSED, allow_continue, continue_shift
+from workforce.board import WEB, Board, Card, E, Role, chips, detail, render, team, usd
+from workforce.people import PERSON, Person, people_or_exit, require_sign_in, signed_in_html
 
-CSS = Path(__file__).resolve().parent.parent / "web" / "upkeep.css"
+ROOT = Path(__file__).resolve().parent.parent
+CSS = ROOT / "web" / "upkeep.css"
+PEOPLE_FILE = ROOT / "fixtures" / "people.json"
 WORKSPACE = "KaaS Dairy"
 TEAM = (
     Role(
@@ -44,16 +50,16 @@ def langfuse_url(card_id: str) -> str:
 
 def spend_html(board: Board, state: Path) -> str:
     rows = "".join(
-        f"<tr><td>{E(who)}</td><td class=n>{n}</td><td class=n>{killed}</td>"
+        f"<tr><td>{E(who)}</td><td class=n>{count}</td><td class=n>{killed}</td>"
         f"<td class=n>{usd(spent)}</td></tr>"
-        for who, (n, killed, spent) in budget.by_employee(board).items()
+        for who, (count, killed, spent) in budget.by_employee(board).items()
     )
-    spent, cap, alert = sum(c.cost for c in board.cards), usd(budget.BUDGET), budget.sent(state)
+    total, cap = budget.spent(board), usd(budget.budget_usd())
     status = (
-        f'<div class="verdict no"><b>Budget alert for {E(budget.LEAD)} on the board</b>'
-        f"<span>{usd(alert['spent'])} spent when it went, over the {cap} budget.</span></div>"
-        if alert
-        else f'<div class="verdict ok"><b>Within budget</b><span>{usd(spent)} of {cap} spent.</span></div>'
+        f'<div class="verdict no"><b>Over budget: paused for {E(budget.LEAD)}</b>'
+        f"<span>{usd(total)} spent of the {cap} budget.</span></div>"
+        if (state / PAUSED).exists()
+        else f'<div class="verdict ok"><b>Within budget</b><span>{usd(total)} of {cap} spent.</span></div>'
     )
     return (
         '<h2 class="sec" id="spend">Spend by employee</h2><p class="sub">Every run priced from its tokens, '
@@ -70,62 +76,111 @@ def order_html(card: Card, cmms: Cmms) -> str:
     if not order:
         why = cmms.dismissed.get(card.id)
         return trace + (f'<div class="receipt order"><h4>Dismissed</h4><p>{E(why)}</p></div>' if why else "")
-    p = PROCEDURES[order.procedure]
+    procedure = PROCEDURES[order.procedure]
     return trace + (
-        f'<div class="receipt order"><h4>{E(order.id)} in the maintenance system</h4>'
-        f"<p>{E(MACHINES[order.machine]['name'])}: {E(p['steps'])}.</p>"
-        f"<p>{E(p['part'])}, {E(p['skill'])}, {p['hours']:g} h, {E(order.priority)} priority. "
-        f"Alerts on this order: {E(', '.join(order.alerts))}.</p></div>"
+        f'<div class="receipt order"><h4>{E(order.order_id)} in the maintenance system</h4>'
+        f"<p>{E(MACHINES[order.machine]['name'])}: {E(procedure['steps'])}.</p>"
+        f"<p>{E(procedure['part'])}, {E(procedure['skill'])}, {procedure['hours']:g} h, "
+        f"{E(order.priority)} priority. Alerts on this order: {E(', '.join(order.alerts))}.</p></div>"
     )
 
 
-def dress(page: str) -> str:
-    """Mission Control's page in KaaS Dairy's workspace, with what this session adds to its styles."""
-    return page.replace("</head>", '<link rel="stylesheet" href="/upkeep.css"></head>', 1)
+def pause_html(card: Card, state: Path) -> str:
+    """The pause card: the question, the form while the shift waits, and every attempt on it."""
+    rows = (
+        "".join(
+            f'<tr class="{"no" if row["decision"] == "refused" else ""}"><td>{E(row["by"])}</td>'
+            f"<td>{chips([row['decision']], 'red' if row['decision'] == 'refused' else 'green')}</td>"
+            f'<td class="said">{E(row["said"])}</td><td>{E(row["at"])}</td></tr>'
+            for row in budget.decisions(state)
+        )
+        or '<tr><td colspan="4">No decisions yet.</td></tr>'
+    )
+    form = (
+        '<div class="receipt open"><h4>The shift is paused</h4>'
+        f"<p>{E(budget.LEAD)} decides whether the rest of the alerts run past the budget.</p>"
+        f'<form method="post" action="/cards/{E(card.id)}/continue" class="decide">'
+        '<button class="btn dark">Continue the shift</button></form></div>'
+        if (state / PAUSED).exists()
+        else ""
+    )
+    return (
+        form + '<h2 class="sec" id="decisions">Decisions</h2><p class="sub">Every attempt to continue the '
+        "shift, refusals included.</p>"
+        '<table class="tbl decisions"><thead><tr><th>Who</th><th>Decision</th><th>Said</th><th>At</th></tr>'
+        f"</thead><tbody>{rows}</tbody></table>"
+    )
 
 
-def board_page(state: Path) -> str:
+def with_css(text: str) -> str:
+    return text.replace("</head>", '<link rel="stylesheet" href="/upkeep.css"></head>', 1)
+
+
+def board_page(state: Path, person: Person) -> str:
     board = Board.open(state / "board.json")
-    page = render(board, workspace=WORKSPACE).replace(
+    page = render(board, workspace=WORKSPACE, signed_in=signed_in_html(person)).replace(
         '<div class="lanes">', spend_html(board, state) + '<div class="lanes">', 1
     )
-    return dress(page)
+    return with_css(page)
 
 
-def card_page(state: Path, card_id: str) -> str:
+def card_page(state: Path, card_id: str, person: Person) -> str:
     card = Board.open(state / "board.json").card(card_id)
-    page = detail(card, None, workspace=WORKSPACE)
-    extra = order_html(card, Cmms.open(state / "cmms.json"))
-    page = page.replace('<h2 class="sec">Runs</h2>', extra + '<h2 class="sec">Runs</h2>', 1)
-    return dress(page)
+    page = detail(card, None, workspace=WORKSPACE, signed_in=signed_in_html(person))
+    extra = (
+        pause_html(card, state) if card.id == PAUSE_CARD else order_html(card, Cmms.open(state / "cmms.json"))
+    )
+    return with_css(page.replace('<h2 class="sec">Runs</h2>', extra + '<h2 class="sec">Runs</h2>', 1))
 
 
-def app(state: Path) -> web.Application:
-    async def index(_: web.Request) -> web.Response:
-        return web.Response(text=board_page(state), content_type="text/html")
+def app(state: Path, people) -> web.Application:
+    tasks: set[asyncio.Task] = set()
 
-    async def one(req: web.Request) -> web.Response:
+    async def index(request: web.Request) -> web.Response:
+        return web.Response(text=board_page(state, request[PERSON]), content_type="text/html")
+
+    async def one(request: web.Request) -> web.Response:
         try:
-            return web.Response(text=card_page(state, req.match_info["id"]), content_type="text/html")
+            text = card_page(state, request.match_info["id"], request[PERSON])
         except StopIteration:
             raise web.HTTPNotFound() from None
+        return web.Response(text=text, content_type="text/html")
 
-    async def roster(_: web.Request) -> web.Response:
-        page = team(Board.open(state / "board.json"), TEAM, workspace=WORKSPACE)
-        return web.Response(text=dress(page), content_type="text/html")
+    async def roster(request: web.Request) -> web.Response:
+        page = team(
+            Board.open(state / "board.json"),
+            TEAM,
+            workspace=WORKSPACE,
+            signed_in=signed_in_html(request[PERSON]),
+        )
+        return web.Response(text=with_css(page), content_type="text/html")
+
+    async def proceed(request: web.Request) -> web.Response:
+        """The signed-in person asks to continue; the refusal is already logged, so the card page shows it."""
+        name = request[PERSON].name
+        try:
+            allow_continue(state, name)
+        except Refused:
+            raise web.HTTPSeeOther(f"/cards/{PAUSE_CARD}") from None
+        task = asyncio.create_task(continue_shift(state, name, get=langfuse()))
+        tasks.add(task)
+        task.add_done_callback(tasks.discard)
+        raise web.HTTPSeeOther(f"/cards/{PAUSE_CARD}")
 
     async def css(_: web.Request) -> web.FileResponse:
         return web.FileResponse(CSS)
 
-    a = web.Application()
-    a.router.add_get("/", index)
-    a.router.add_get("/cards/{id}", one)
-    a.router.add_get("/team", roster)
-    a.router.add_get("/upkeep.css", css)
-    a.router.add_static("/static", WEB)
-    a.router.add_static("/fonts", WEB / "fonts")
-    return a
+    web_app = web.Application()
+    require_sign_in(web_app, people, WORKSPACE, ("/upkeep.css",))
+    web_app.router.add_get("/", index)
+    web_app.router.add_get("/cards/{id}", one)
+    web_app.router.add_post(f"/cards/{PAUSE_CARD}/continue", proceed)
+    web_app.router.add_get("/team", roster)
+    web_app.router.add_get("/upkeep.css", css)
+    web_app.router.add_static("/static", WEB)
+    web_app.router.add_static("/fonts", WEB / "fonts")
+    return web_app
 
 
 def serve(state: Path, port: int = 8095) -> None:
-    web.run_app(app(state), host="127.0.0.1", port=port)
+    web.run_app(app(state, people_or_exit(PEOPLE_FILE)), host="127.0.0.1", port=port)

@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 
 
 def batch(rows: list[dict]) -> dict:
-    resource = {"attributes": attrs({"service.name": "brekke-maintenance"})}
+    resource = {"attributes": attrs({"service.name": "kaas-maintenance"})}
     return {
         "resourceSpans": [
             {"resource": resource, "scopeSpans": [{"scope": {"name": "openai-agents"}, "spans": rows}]}
@@ -57,7 +57,7 @@ def step(span: Span[Any], ended: bool = True) -> dict:
     if usage:
         # Priced here, from the same list price the board uses, so the trace and the card agree.
         found["gen_ai.usage.cost"] = cost(usage.get("input_tokens", 0), usage.get("output_tokens", 0))
-    err = span.error
+    failure = span.error
     return {
         "traceId": ids(span.trace_id, 32),
         "spanId": ids(span.span_id, 16),
@@ -67,7 +67,7 @@ def step(span: Span[Any], ended: bool = True) -> dict:
         "startTimeUnixNano": nanos(span.started_at),
         "endTimeUnixNano": nanos(span.ended_at if ended else span.started_at),
         "attributes": attrs(found),
-        "status": {"code": 2, "message": err["message"]} if err else {"code": 1},
+        "status": {"code": 2, "message": failure["message"]} if failure else {"code": 1},
     }
 
 
@@ -82,12 +82,12 @@ class Streaming(TracingProcessor):
     def send(self, rows: list[dict], what: str) -> None:
         try:
             self.post(batch(rows))
-        except Exception as e:  # a trace is evidence, not a dependency: the card goes on without it
-            log.warning("Langfuse dropped %s: %s", what, e)
+        except Exception as error:  # a trace is evidence, not a dependency: the card goes on without it
+            log.warning("Langfuse dropped %s: %s", what, error)
 
     def on_trace_start(self, trace: Trace) -> None:
-        at = self.started[trace.trace_id] = now()
-        self.send([root(trace, at, at)], trace.name)
+        moment = self.started[trace.trace_id] = now()
+        self.send([root(trace, moment, moment)], trace.name)
 
     def on_span_start(self, span: Span[Any]) -> None:
         # A model call hangs under its turn and its employee's agent span, which end only after it: posted

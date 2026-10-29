@@ -86,9 +86,10 @@ title = "Trace AI Agents in Production"
 folder = "trace-in-production"
 built = true
 job = "A factory maintenance agent reads machine alerts and books repairs; it is killed mid-run and resumes, each run one Langfuse trace"
-truth = "The trace's spans match the card's runs, every repair order exists once, and the budget alert fires on the board"
-screen = "The killed run and the resume in the terminal, its trace in Langfuse, spend by employee on the board, the budget alert as sent"
+truth = "The trace's spans match the card's runs, every repair order exists once, and a shift over its budget waits on the board for the maintenance lead"
+screen = "The killed run and the resume in the terminal, its trace in Langfuse, spend by employee on the board, and the maintenance lead signing in to continue a shift that ran over budget"
 sells = "The Deploy workshop on 16 Dec"
+readable = true
 
 [[session]]
 date = "2026-12-17"

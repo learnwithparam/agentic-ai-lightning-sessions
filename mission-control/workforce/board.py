@@ -64,6 +64,7 @@ class Run:
     note: str
     steps: list[str] = field(default_factory=list)
     read: list[str] = field(default_factory=list)
+    killed: bool = False
 
 
 @dataclass

@@ -1,4 +1,4 @@
-"""Brekke Dairy's maintenance crew: two AI employees who turn a machine alert into a booked repair.
+"""KaaS Dairy's maintenance crew: two AI employees who turn a machine alert into a booked repair.
 
 Alert triage reads the machine's sensor and its open orders, then joins the alert to an open order,
 dismisses one that cleared by itself, or hands it to the Repair planner, who books the manual's
@@ -34,13 +34,13 @@ from upkeep.plant import MACHINES, PROCEDURES, Cmms, Refused
 TRIAGE, PLANNER = "Alert triage", "Repair planner"
 TRACE = "Machine alert"
 
-TRIAGE_PROMPT = """You watch the machine alerts on Line 2 of Brekke Dairy's bottling plant. For each alert,
+TRIAGE_PROMPT = """You watch the machine alerts on Line 2 of KaaS Dairy's bottling plant. For each alert,
 read the machine's sensor first, then do exactly one thing:
 - the machine already has an open order for this fault: attach_to_order with that order's id;
 - the latest reading is back inside the limit and the alert cleared by itself: dismiss_alert;
 - otherwise hand the alert to the Repair planner to book a repair."""
 
-PLANNER_PROMPT = """You book repairs for Brekke Dairy's maintenance team. Look up the machine in the
+PLANNER_PROMPT = """You book repairs for KaaS Dairy's maintenance team. Look up the machine in the
 maintenance manual, then book_repair once with the procedure id for this fault and a priority: critical
 for anything that touches food safety, such as pasteurisation temperature; high when the fault will stop
 the line or a compressor within the shift; medium otherwise."""
@@ -60,21 +60,33 @@ class Shift:
     steps: dict[str, list[str]] = field(default_factory=dict)
 
 
-def readings(m: dict) -> str:
-    return ", ".join(f"{r:g}" for r in m["readings"])
+def machine_id(text: str) -> str:
+    """The model may pass a machine's name ("Ammonia compressor K1") where the manual keys on its id."""
+    wanted = text.strip().upper()
+    for row in MACHINES.values():
+        if wanted in (row["id"], row["name"].upper()):
+            return row["id"]
+    return wanted
+
+
+def readings(machine: dict) -> str:
+    return ", ".join(f"{reading:g}" for reading in machine["readings"])
 
 
 @function_tool
 def read_sensor(ctx: RunContextWrapper[Shift], machine: str) -> str:
     """The machine's sensor: its limit, its last five readings oldest first, and its open repair orders."""
-    m = MACHINES.get(machine.strip().upper())
-    if not m:
+    row = MACHINES.get(machine_id(machine))
+    if not row:
         return f"No machine {machine} on Line 2. Machines: {', '.join(MACHINES)}."
-    orders = ctx.context.cmms.open_on(m["id"])
-    held = "; ".join(f"{o.id} for {PROCEDURES[o.procedure]['fault']}" for o in orders) or "none"
+    orders = ctx.context.cmms.open_on(row["id"])
+    held = (
+        "; ".join(f"{order.order_id} for {PROCEDURES[order.procedure]['fault']}" for order in orders)
+        or "none"
+    )
     return (
-        f"{m['name']}. {m['sensor']}, limit {m['limit']} {m['unit']}. "
-        f"Last five readings: {readings(m)} {m['unit']}. Open orders: {held}."
+        f"{row['name']}. {row['sensor']}, limit {row['limit']} {row['unit']}. "
+        f"Last five readings: {readings(row)} {row['unit']}. Open orders: {held}."
     )
 
 
@@ -84,14 +96,14 @@ def attach_to_order(ctx: RunContextWrapper[Shift], order_id: str) -> str:
     held = ctx.context.cmms.covering(ctx.context.alert["id"])
     try:
         order = ctx.context.cmms.attach(ctx.context.alert["id"], order_id.strip().upper())
-    except Refused as e:
-        return str(e)
-    if held and held.id == order.id:
+    except Refused as refusal:
+        return str(refusal)
+    if held and held.order_id == order.order_id:
         # A resumed run finds its own order open on the machine: nothing new was joined.
-        ctx.context.did = f"already booked {order.id}"
-        return f"This alert is already on {order.id}; nothing changed."
-    ctx.context.did = f"joined {order.id}"
-    return f"Joined {order.id}."
+        ctx.context.did = f"already booked {order.order_id}"
+        return f"This alert is already on {order.order_id}; nothing changed."
+    ctx.context.did = f"joined {order.order_id}"
+    return f"Joined {order.order_id}."
 
 
 @function_tool
@@ -105,11 +117,12 @@ def dismiss_alert(ctx: RunContextWrapper[Shift], reason: str) -> str:
 @function_tool
 def look_up_manual(ctx: RunContextWrapper[Shift], machine: str) -> str:
     """The maintenance manual's procedures for a machine, each with its id, part, skill and hours."""
-    rows = [p for p in PROCEDURES.values() if p["machine"] == machine.strip().upper()]
+    rows = [item for item in PROCEDURES.values() if item["machine"] == machine_id(machine)]
     return (
         "\n".join(
-            f"{p['id']}: {p['fault']}. {p['steps']}. Part {p['part']}, {p['skill']}, {p['hours']:g} h."
-            for p in rows
+            f"{item['id']}: {item['fault']}. {item['steps']}. "
+            f"Part {item['part']}, {item['skill']}, {item['hours']:g} h."
+            for item in rows
         )
         or f"No procedures for {machine}."
     )
@@ -122,14 +135,14 @@ def book_repair(ctx: RunContextWrapper[Shift], procedure: str, priority: str) ->
         order, how = ctx.context.cmms.book(
             ctx.context.alert["id"], procedure.strip().upper(), priority.strip().lower()
         )
-    except Refused as e:
-        return str(e)
-    ctx.context.did = f"{how} {order.id}"
+    except Refused as refusal:
+        return str(refusal)
+    ctx.context.did = f"{how} {order.order_id}"
     if how == "booked" and ctx.context.kill:
         ctx.context.kill()
     if how == "already booked":
-        return f"{order.id} was already booked for this alert; nothing new was booked."
-    return f"{how.capitalize()} {order.id}."
+        return f"{order.order_id} was already booked for this alert; nothing new was booked."
+    return f"{how.capitalize()} {order.order_id}."
 
 
 def acted(ctx: RunContextWrapper[Shift], _: list[FunctionToolResult]) -> ToolsToFinalOutputResult:
@@ -161,9 +174,9 @@ class Ledger(RunHooks[Shift]):
     """Each employee's tokens and steps, counted as the run goes, so the card can credit each one."""
 
     async def on_llm_end(self, context, agent, response) -> None:
-        u = context.context.usage.setdefault(agent.name, [0, 0])
-        u[0] += response.usage.input_tokens
-        u[1] += response.usage.output_tokens
+        tally = context.context.usage.setdefault(agent.name, [0, 0])
+        tally[0] += response.usage.input_tokens
+        tally[1] += response.usage.output_tokens
 
     async def on_tool_start(self, context, agent, tool) -> None:
         context.context.steps.setdefault(agent.name, []).append(tool.name)
@@ -186,12 +199,15 @@ def model() -> Model | str:
 
 
 def ask(alert: dict) -> str:
-    m = MACHINES[alert["machine"]]
-    return f"Alert {alert['id']} at {alert['at']} on {m['name']} (machine {m['id']}): {alert['says']}."
+    machine = MACHINES[alert["machine"]]
+    return (
+        f"Alert {alert['id']} at {alert['at']} on {machine['name']} "
+        f"(machine {machine['id']}): {alert['says']}."
+    )
 
 
 async def handle(
-    alert: dict, cmms: Cmms, m: Model | str, attempt: int, kill: Callable[[], None] | None = None
+    alert: dict, cmms: Cmms, crew_model: Model | str, attempt: int, kill: Callable[[], None] | None = None
 ) -> Shift:
     shift = Shift(cmms, alert, kill)
     config = RunConfig(
@@ -201,9 +217,11 @@ async def handle(
     )
     try:
         await asyncio.wait_for(
-            Runner.run(crew(m), ask(alert), context=shift, max_turns=10, run_config=config, hooks=Ledger()),
+            Runner.run(
+                crew(crew_model), ask(alert), context=shift, max_turns=10, run_config=config, hooks=Ledger()
+            ),
             RUN_SECONDS,
         )
-    except (AgentsException, APIError, TimeoutError) as e:
-        shift.error = type(e).__name__
+    except (AgentsException, APIError, TimeoutError) as failure:
+        shift.error = type(failure).__name__
     return shift

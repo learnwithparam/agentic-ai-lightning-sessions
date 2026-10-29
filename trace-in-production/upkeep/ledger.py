@@ -33,9 +33,9 @@ class Traced:
 
 def langfuse() -> Get | None:
     """Langfuse's API when its keys are set and it answers its health check, else None."""
-    host, public, secret = (
-        os.environ.get(k) for k in ("LANGFUSE_HOST", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY")
-    )
+    host = os.environ.get("LANGFUSE_HOST")
+    public = os.environ.get("LANGFUSE_PUBLIC_KEY")
+    secret = os.environ.get("LANGFUSE_SECRET_KEY")
     if not (host and public and secret):
         return None
     try:
@@ -45,9 +45,9 @@ def langfuse() -> Get | None:
     auth = base64.b64encode(f"{public}:{secret}".encode()).decode()
 
     def get(path: str) -> dict:
-        req = urllib.request.Request(f"{host}{path}", headers={"Authorization": f"Basic {auth}"})  # noqa: S310
-        with urllib.request.urlopen(req, timeout=15) as r:  # noqa: S310 - LANGFUSE_HOST from the env
-            return json.load(r)
+        request = urllib.request.Request(f"{host}{path}", headers={"Authorization": f"Basic {auth}"})  # noqa: S310
+        with urllib.request.urlopen(request, timeout=15) as response:  # noqa: S310 - LANGFUSE_HOST from the env
+            return json.load(response)
 
     return get
 
@@ -56,36 +56,38 @@ def pages(get: Get, **query) -> list[dict]:
     """Every row of Langfuse's v2 observations API for this query, following its cursor."""
     rows, cursor = [], None
     while True:
-        q = {**query, "limit": 1000} | ({"cursor": cursor} if cursor else {})
-        page = get(f"/api/public/v2/observations?{urllib.parse.urlencode(q)}")
+        params = {**query, "limit": 1000} | ({"cursor": cursor} if cursor else {})
+        page = get(f"/api/public/v2/observations?{urllib.parse.urlencode(params)}")
         rows += page["data"]
-        if not (cursor := (page.get("meta") or {}).get("cursor")):
+        cursor = (page.get("meta") or {}).get("cursor")
+        if not cursor:
             return rows
 
 
 def employee(row: dict, by_id: dict[str, dict]) -> str | None:
     """The agent span a model call sits under: its employee."""
-    seen = row
-    while seen := by_id.get(seen.get("parentObservationId") or ""):
-        if seen.get("type") == "AGENT":
-            return seen.get("name")
+    parent = by_id.get(row.get("parentObservationId") or "")
+    while parent:
+        if parent.get("type") == "AGENT":
+            return parent.get("name")
+        parent = by_id.get(parent.get("parentObservationId") or "")
     return None
 
 
 def usage(rows: list[dict]) -> dict[str, list[int]]:
-    by_id = {r["id"]: r for r in rows}
-    out: dict[str, list[int]] = {}
-    for r in rows:
-        if r.get("type") != "GENERATION":
+    by_id = {row["id"]: row for row in rows}
+    totals: dict[str, list[int]] = {}
+    for row in rows:
+        if row.get("type") != "GENERATION":
             continue
-        u, who = r.get("usageDetails") or {}, employee(r, by_id) or "Unknown"
-        tally = out.setdefault(who, [0, 0])
-        tally[0] += int(u.get("input") or 0)
-        tally[1] += int(u.get("output") or 0)
-    return out
+        counts = row.get("usageDetails") or {}
+        tally = totals.setdefault(employee(row, by_id) or "Unknown", [0, 0])
+        tally[0] += int(counts.get("input") or 0)
+        tally[1] += int(counts.get("output") or 0)
+    return totals
 
 
-def at(stamp: str) -> datetime:
+def parse_time(stamp: str) -> datetime:
     return datetime.fromisoformat(stamp.replace("Z", "+00:00"))
 
 
@@ -94,12 +96,16 @@ def traces(get: Get, card: str, since: str | None = None) -> list[Traced]:
     roots = pages(get, name=TRACE, sessionId=card, isRootObservation="true", fields="basic,metadata")
     # The card id is the session in every shift, so an earlier shift's runs share it.
     if since:
-        roots = [r for r in roots if r.get("startTime") and at(r["startTime"]) >= at(since)]
+        roots = [
+            root
+            for root in roots
+            if root.get("startTime") and parse_time(root["startTime"]) >= parse_time(since)
+        ]
     # The root is posted when a run starts and again when it ends; both rows are one run.
-    latest = {r["traceId"]: r for r in sorted(roots, key=lambda r: r.get("startTime") or "")}
-    out = []
-    for tid, r in latest.items():
-        rows = pages(get, traceId=tid, fields="basic,usage")
-        meta = r.get("metadata") or {}
-        out.append(Traced(tid, r.get("startTime") or "", str(meta.get("attempt", "")), usage(rows)))
-    return sorted(out, key=lambda t: t.started)
+    latest = {root["traceId"]: root for root in sorted(roots, key=lambda root: root.get("startTime") or "")}
+    found = []
+    for trace_id, root in latest.items():
+        rows = pages(get, traceId=trace_id, fields="basic,usage")
+        meta = root.get("metadata") or {}
+        found.append(Traced(trace_id, root.get("startTime") or "", str(meta.get("attempt", "")), usage(rows)))
+    return sorted(found, key=lambda traced: traced.started)

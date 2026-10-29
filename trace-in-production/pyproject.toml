@@ -20,7 +20,7 @@ package = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # The board, its cards and the model come from mission-control, the app every Lightning extends.
-pythonpath = [".", "../mission-control"]
+pythonpath = [".", "tests", "../mission-control"]
 addopts = "--import-mode=importlib -q --strict-markers"
 markers = ["lab(slug): the acceptance test for one Lightning, named in steps.toml"]
 

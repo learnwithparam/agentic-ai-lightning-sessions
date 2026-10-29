@@ -1,4 +1,4 @@
-# Line 2 at Brekke Dairy's bottling plant: each machine, its sensor's last five readings, and the
+# Line 2 at KaaS Dairy's bottling plant: each machine, its sensor's last five readings, and the
 # maintenance manual's procedure for its fault. The repair planner books only a procedure listed here.
 
 [[machine]]
