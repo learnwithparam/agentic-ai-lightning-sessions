@@ -73,9 +73,10 @@ slug = "build-evals-for-an-ai-agent"
 title = "Build AI Agent Evals from Production Traces"
 folder = "evals-from-traces"
 built = true
-job = "Quillon's past medical-inquiry runs become a labelled test set that gates a model swap"
+readable = true
+job = "KaaS Pharma's past medical-inquiry runs become a labelled test set that gates a model swap, and a swap that passes waits for the medical information lead"
 truth = "Labels on real runs, scored by code checks first and a judge for the rest"
-screen = "The eval report on the board, then the model swap refused because a missed side effect failed"
+screen = "The gate refuses a cheaper model that missed a side effect, then a safe candidate passes and only Dr. Amara Okafor signs the swap on the board"
 sells = "The Deploy workshop on 16 Dec"
 
 [[session]]

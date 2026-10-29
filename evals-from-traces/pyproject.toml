@@ -1,7 +1,7 @@
 [project]
 name = "evals-from-traces"
 version = "0.1.0"
-description = "Quillon's medical information agent answers doctors from its approved label; its real runs in Langfuse become a labelled test set, scored by code checks and a judge checked against the labels, that refuses a model swap which misses a side effect"
+description = "KaaS Pharma's medical information agent answers doctors from its approved label; its real runs in Langfuse become a labelled test set, scored by code checks and a judge checked against the labels, that refuses a model swap which misses a side effect"
 requires-python = ">=3.13"
 dependencies = [
     "aiohttp==3.14.4",
@@ -25,12 +25,16 @@ addopts = "--import-mode=importlib -q --strict-markers"
 markers = ["lab(slug): the acceptance test for one Lightning, named in steps.toml"]
 
 [tool.ruff]
-line-length = 110
+line-length = 88
 target-version = "py313"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "B", "UP", "S"]
-ignore = ["S101"]
+select = ["E", "F", "W", "I", "B", "UP", "S", "N", "SIM", "C90"]
+# E501 is off: the formatter wraps code at 88, and prose in strings and docstrings may run on.
+ignore = ["S101", "N818", "E501"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 8
 
 [tool.ruff.lint.isort]
 known-first-party = ["evals", "workforce"]

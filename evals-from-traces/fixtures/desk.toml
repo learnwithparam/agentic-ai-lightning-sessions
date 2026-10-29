@@ -1,0 +1,4 @@
+# The model and prompt production runs today. A signed swap writes .evals/production.json, which wins.
+[production]
+model = "openai/gpt-6-luna"
+prompt = "production"

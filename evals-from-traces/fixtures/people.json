@@ -1,0 +1,4 @@
+[
+  {"name": "Dr. Amara Okafor", "role": "medical information lead", "passphrase_env": "BOARD_PASSPHRASE_AMARA_OKAFOR"},
+  {"name": "Jonas Weber", "role": "platform engineer", "passphrase_env": "BOARD_PASSPHRASE_JONAS_WEBER"}
+]

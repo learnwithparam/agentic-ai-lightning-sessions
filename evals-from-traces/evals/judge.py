@@ -13,7 +13,7 @@ import os
 import tomllib
 from dataclasses import dataclass
 
-from agents import Agent, AgentsException, Model, RunConfig, Runner
+from agents import Agent, AgentsException, Model, ModelSettings, RunConfig, Runner
 from openai import APIError
 from pydantic import BaseModel
 
@@ -50,21 +50,43 @@ class Calibration:
         return self.rate >= TRUST
 
 
+def judge_model_name() -> str:
+    return os.environ.get("JUDGE_MODEL", "openai/gpt-6-luna")
+
+
 def judge_model() -> Model | str:
-    return openrouter(os.environ.get("JUDGE_MODEL", "openai/gpt-6-luna"))
+    return openrouter(judge_model_name())
 
 
 def judge(model: Model | str) -> Agent:
-    return Agent(name="Judge", instructions=RUBRIC, model=model, output_type=Verdict)
+    # Temperature 0: the same answer must get the same grade, or a swap flips on judge noise.
+    return Agent(
+        name="Judge",
+        instructions=RUBRIC,
+        model=model,
+        output_type=Verdict,
+        model_settings=ModelSettings(temperature=0),
+    )
 
 
 def ask(question: str, sections: list[str], answer: str) -> str:
-    cited = "\n".join(f"§{s}: {SECTIONS[s]['text']}" for s in sections if s in SECTIONS) or "(none)"
+    cited = (
+        "\n".join(
+            f"§{section}: {SECTIONS[section]['text']}"
+            for section in sections
+            if section in SECTIONS
+        )
+        or "(none)"
+    )
     return f"Question: {question}\n\nCited sections:\n{cited}\n\nAnswer: {answer}"
 
 
-async def verdict(model: Model | str, question: str, sections: list[str], answer: str) -> Verdict | None:
-    for _ in range(2):  # one retry: a judge call that fails is no evidence about the answer
+async def verdict(
+    model: Model | str, question: str, sections: list[str], answer: str
+) -> Verdict | None:
+    for _ in range(
+        2
+    ):  # one retry: a judge call that fails is no evidence about the answer
         try:
             result = await asyncio.wait_for(
                 Runner.run(
@@ -83,20 +105,27 @@ async def verdict(model: Model | str, question: str, sections: list[str], answer
 
 async def calibrate(model: Model | str) -> Calibration:
     agreed = 0
-    for g in GRADED:
-        v = await verdict(model, g["question"], g["sections"], g["answer"])
-        agreed += v is not None and v.good == g["good"]
+    for hand_graded in GRADED:
+        result = await verdict(
+            model,
+            hand_graded["question"],
+            hand_graded["sections"],
+            hand_graded["answer"],
+        )
+        agreed += result is not None and result.good == hand_graded["good"]
     return Calibration(agreed, len(GRADED))
 
 
 async def grade(model: Model | str, scored: list[Scored], cal: Calibration) -> None:
     """Add the judge's check to every answer the code checks passed; it fails a case only when trusted."""
-    for s in scored:
-        if not s.passed or s.record.route != "answer":
+    for entry in scored:
+        if not entry.passed or entry.record.route != "answer":
             continue
-        v = await verdict(model, s.case.inquiry["question"], s.record.sections, s.record.text)
-        said = "no verdict" if v is None else v.reason
-        ok = v is not None and v.good
+        question, record = entry.case.inquiry["question"], entry.record
+        result = await verdict(model, question, record.sections, record.text)
+        said = "no verdict" if result is None else result.reason
+        good = result is not None and result.good
         if not cal.trusted:
-            said, ok = f"not counted, agrees with the hand grades {cal.agreed} of {cal.total}: {said}", True
-        s.checks.append(Check("judge", ok, said))
+            said = f"not counted, agrees with the hand grades {cal.agreed} of {cal.total}: {said}"
+            good = True
+        entry.checks.append(Check("judge", good, said))

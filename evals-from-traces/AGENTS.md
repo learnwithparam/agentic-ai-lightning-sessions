@@ -1,6 +1,6 @@
 # Build AI Agent Evals from Production Traces
 
-Quillon Pharma's medical information desk, on `../mission-control`'s board, and the evals that gate a
+KaaS Pharma's medical information desk, on `../mission-control`'s board, and the evals that gate a
 change to it.
 
 - `make check` is the gate: ruff, format and pytest. The desk's tools, the checks and the gate are real;

@@ -14,13 +14,18 @@ from dataclasses import dataclass, field
 from evals.desk import SECTIONS, Record
 from evals.testset import Case
 
-SAID = {"answer": "answered", "safety": "sent to safety", "decline": "declined", None: "never acted"}
+SAID = {
+    "answer": "answered",
+    "safety": "sent to safety",
+    "decline": "declined",
+    None: "never acted",
+}
 
 
 @dataclass
 class Check:
     name: str
-    ok: bool
+    passed: bool
     said: str
     critical: bool = False
 
@@ -33,15 +38,15 @@ class Scored:
 
     @property
     def passed(self) -> bool:
-        return all(c.ok for c in self.checks)
+        return all(check.passed for check in self.checks)
 
     @property
     def critical(self) -> list[Check]:
-        return [c for c in self.checks if c.critical and not c.ok]
+        return [check for check in self.checks if check.critical and not check.passed]
 
     @property
     def failed(self) -> list[Check]:
-        return [c for c in self.checks if not c.ok]
+        return [check for check in self.checks if not check.passed]
 
 
 def numbers(text: str) -> list[str]:
@@ -57,22 +62,41 @@ def route(label: dict, rec: Record) -> Check:
 
 
 def cites(label: dict, rec: Record) -> Check:
-    unknown = [s for s in rec.sections if s not in SECTIONS]
+    unknown = [section for section in rec.sections if section not in SECTIONS]
     if unknown:
-        return Check("citations", False, f"cites §{', §'.join(unknown)}, which the label does not have")
+        return Check(
+            "citations",
+            False,
+            f"cites §{', §'.join(unknown)}, which the label does not have",
+        )
     if label["section"] not in rec.sections:
-        cited = ", ".join(f"§{s}" for s in rec.sections) or "nothing"
-        return Check("citations", False, f"cites {cited}; the answer is in §{label['section']}")
-    return Check("citations", True, "cites " + ", ".join(f"§{s}" for s in rec.sections))
+        cited = ", ".join(f"§{section}" for section in rec.sections) or "nothing"
+        return Check(
+            "citations", False, f"cites {cited}; the answer is in §{label['section']}"
+        )
+    return Check(
+        "citations",
+        True,
+        "cites " + ", ".join(f"§{section}" for section in rec.sections),
+    )
 
 
 def figures(rec: Record, question: str = "") -> Check:
     """Every number in the answer is printed in a section it cites, is a cited id, or repeats the question."""
-    source = " ".join([question] + [SECTIONS[s]["text"] for s in rec.sections if s in SECTIONS])
-    allowed = set(numbers(source)) | {n for s in rec.sections for n in numbers(s)}
-    stray = [n for n in numbers(rec.text) if n not in allowed]
+    source = " ".join(
+        [question]
+        + [SECTIONS[section]["text"] for section in rec.sections if section in SECTIONS]
+    )
+    allowed = set(numbers(source)) | {
+        number for section in rec.sections for number in numbers(section)
+    }
+    stray = [number for number in numbers(rec.text) if number not in allowed]
     if stray:
-        return Check("numbers", False, "not in the cited text: " + ", ".join(dict.fromkeys(stray)))
+        return Check(
+            "numbers",
+            False,
+            "not in the cited text: " + ", ".join(dict.fromkeys(stray)),
+        )
     return Check("numbers", True, "every number is in the cited text")
 
 
@@ -90,14 +114,19 @@ def score(case: Case, rec: Record | None = None) -> Scored:
 
 @dataclass
 class Swap:
-    ok: bool
+    approved: bool
     reasons: list[str]
 
 
 def gate(production: list[Scored], candidate: list[Scored]) -> Swap:
     """Ship the candidate only if it misses no side effect and passes at least what production passes."""
-    reasons = [f"{s.case.id}: {c.said}" for s in candidate for c in s.critical]
-    base, cand = sum(s.passed for s in production), sum(s.passed for s in candidate)
+    reasons = [
+        f"{scored.case.inquiry_id}: {check.said}"
+        for scored in candidate
+        for check in scored.critical
+    ]
+    base = sum(scored.passed for scored in production)
+    cand = sum(scored.passed for scored in candidate)
     if cand < base:
         reasons.append(f"passes {cand} of {len(candidate)}; production passes {base}")
     return Swap(not reasons, reasons)
