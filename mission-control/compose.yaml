@@ -112,6 +112,7 @@ services:
     volumes:
       - clickhouse_data:/var/lib/clickhouse
       - clickhouse_logs:/var/log/clickhouse-server
+      - ./deploy/clickhouse-quiet.xml:/etc/clickhouse-server/config.d/quiet.xml:ro
     healthcheck:
       # 127.0.0.1, not localhost: Docker Desktop has no IPv6 inside the VM, so ClickHouse binds IPv4 only.
       test: wget --no-verbose --tries=1 --spider http://127.0.0.1:8123/ping || exit 1

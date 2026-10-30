@@ -1,0 +1,11 @@
+<clickhouse>
+  <!-- ClickHouse's own diagnostics: Langfuse reads none of them, and they grew to 50M rows (220MB) on an
+       idle stack. -->
+  <trace_log remove="1"/>
+  <text_log remove="1"/>
+  <metric_log remove="1"/>
+  <asynchronous_metric_log remove="1"/>
+  <opentelemetry_span_log remove="1"/>
+  <processors_profile_log remove="1"/>
+  <part_log remove="1"/>
+</clickhouse>

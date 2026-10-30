@@ -2,6 +2,7 @@
 workspace name is always given."""
 
 import inspect
+from pathlib import Path
 
 import pytest
 
@@ -33,3 +34,13 @@ def test_a_page_has_no_default_workspace():
     assert inspect.signature(page).parameters["workspace"].default is inspect.Parameter.empty
     with pytest.raises(TypeError):
         page("Board", "", "board")
+
+
+def test_clickhouse_diagnostic_logs_stay_off():
+    # ClickHouse's own logs grew to 50M rows on an idle stack; Langfuse reads none of them.
+    root = Path(__file__).resolve().parent.parent
+    mount = "./deploy/clickhouse-quiet.xml:/etc/clickhouse-server/config.d/quiet.xml:ro"
+    assert mount in (root / "compose.yaml").read_text()
+    quiet = (root / "deploy/clickhouse-quiet.xml").read_text()
+    for table in ("trace_log", "text_log", "metric_log", "asynchronous_metric_log"):
+        assert f'<{table} remove="1"/>' in quiet
